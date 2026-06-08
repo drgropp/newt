@@ -1,0 +1,9 @@
+newt.exe
+newt
+*.exe
+*.o
+*.obj
+*.pdb
+*.ilk
+.DS_Store
+Thumbs.db
