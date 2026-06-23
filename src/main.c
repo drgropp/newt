@@ -49,12 +49,18 @@ typedef struct {
     TokenType type;
     const char *start;
     int length;
+    int line;
+    int column;
 } Token;
 
 typedef struct {
     const char *source;
     const char *start;
     const char *current;
+    int line;
+    int column;
+    int start_line;
+    int start_column;
 } Lexer;
 
 static void print_help(void) {
@@ -117,6 +123,10 @@ static void lexer_init(Lexer *lexer, const char *source) {
     lexer->source = source;
     lexer->start = source;
     lexer->current = source;
+    lexer->line = 1;
+    lexer->column = 1;
+    lexer->start_line = 1;
+    lexer->start_column = 1;
 }
 
 static int lexer_is_at_end(Lexer *lexer) {
@@ -126,6 +136,14 @@ static int lexer_is_at_end(Lexer *lexer) {
 static char lexer_advance(Lexer *lexer) {
     char ch = *lexer->current;
     lexer->current++;
+
+    if (ch == '\n') {
+        lexer->line++;
+        lexer->column = 1;
+    } else {
+        lexer->column++;
+    }
+
     return ch;
 }
 
@@ -159,7 +177,15 @@ static Token make_token(Lexer *lexer, TokenType type) {
     token.type = type;
     token.start = lexer->start;
     token.length = (int)(lexer->current - lexer->start);
+    token.line = lexer->start_line;
+    token.column = lexer->start_column;
     return token;
+}
+
+static void lexer_mark_start(Lexer *lexer) {
+    lexer->start = lexer->current;
+    lexer->start_line = lexer->line;
+    lexer->start_column = lexer->column;
 }
 
 static int is_ident_start(char ch) {
@@ -258,7 +284,7 @@ static Token lex_string(Lexer *lexer) {
 
 static Token next_token(Lexer *lexer) {
     for (;;) {
-        lexer->start = lexer->current;
+        lexer_mark_start(lexer);
 
         char ch = lexer_peek(lexer);
 
@@ -277,7 +303,7 @@ static Token next_token(Lexer *lexer) {
         break;
     }
 
-    lexer->start = lexer->current;
+    lexer_mark_start(lexer);
 
     if (lexer_is_at_end(lexer)) {
         return make_token(lexer, TOKEN_EOF);
@@ -415,11 +441,16 @@ static const char *token_type_name(TokenType type) {
 
 static void print_token(Token token) {
     if (token.type == TOKEN_NEWLINE || token.type == TOKEN_EOF) {
-        printf("%s\n", token_type_name(token.type));
+        printf("%d:%d %s\n", token.line, token.column, token_type_name(token.type));
         return;
     }
 
-    printf("%s %.*s\n", token_type_name(token.type), token.length, token.start);
+    printf("%d:%d %s %.*s\n",
+           token.line,
+           token.column,
+           token_type_name(token.type),
+           token.length,
+           token.start);
 }
 
 static void print_tokens(const char *source) {
