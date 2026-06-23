@@ -1,0 +1,10 @@
+# Newt lexer test
+
+val name = "newt"
+mut hp = 100
+
+if hp >= 50
+    print name
+else
+    print "low hp"
+end
