@@ -9,6 +9,7 @@ typedef enum {
     TOKEN_EOF,
     TOKEN_NEWLINE,
     TOKEN_UNKNOWN,
+    TOKEN_ERROR,
     TOKEN_IDENT,
     TOKEN_NUMBER,
     TOKEN_STRING,
@@ -51,6 +52,7 @@ typedef struct {
     int length;
     int line;
     int column;
+    const char *error_message;
 } Token;
 
 typedef struct {
@@ -179,6 +181,13 @@ static Token make_token(Lexer *lexer, TokenType type) {
     token.length = (int)(lexer->current - lexer->start);
     token.line = lexer->start_line;
     token.column = lexer->start_column;
+    token.error_message = NULL;
+    return token;
+}
+
+static Token make_error_token(Lexer *lexer, const char *message) {
+    Token token = make_token(lexer, TOKEN_ERROR);
+    token.error_message = message;
     return token;
 }
 
@@ -277,9 +286,10 @@ static Token lex_string(Lexer *lexer) {
 
     if (lexer_peek(lexer) == '"') {
         lexer_advance(lexer);
+        return make_token(lexer, TOKEN_STRING);
     }
 
-    return make_token(lexer, TOKEN_STRING);
+    return make_error_token(lexer, "unterminated string");
 }
 
 static Token next_token(Lexer *lexer) {
@@ -359,7 +369,7 @@ static Token next_token(Lexer *lexer) {
             break;
     }
 
-    return make_token(lexer, TOKEN_UNKNOWN);
+    return make_error_token(lexer, "unknown character");
 }
 
 static const char *token_type_name(TokenType type) {
@@ -370,6 +380,8 @@ static const char *token_type_name(TokenType type) {
             return "NEWLINE";
         case TOKEN_UNKNOWN:
             return "UNKNOWN";
+        case TOKEN_ERROR:
+            return "ERROR";
         case TOKEN_IDENT:
             return "IDENT";
         case TOKEN_NUMBER:
@@ -453,12 +465,36 @@ static void print_token(Token token) {
            token.start);
 }
 
-static void print_tokens(const char *source) {
+static void print_lexer_error(const char *path, Token token) {
+    if (token.length == 1 && token.error_message != NULL &&
+        strcmp(token.error_message, "unknown character") == 0) {
+        printf("%s:%d:%d: lexer error: %s '%c'\n",
+               path,
+               token.line,
+               token.column,
+               token.error_message,
+               token.start[0]);
+        return;
+    }
+
+    printf("%s:%d:%d: lexer error: %s\n",
+           path,
+           token.line,
+           token.column,
+           token.error_message);
+}
+
+static void print_tokens(const char *path, const char *source) {
     Lexer lexer;
     lexer_init(&lexer, source);
 
     for (;;) {
         Token token = next_token(&lexer);
+
+        if (token.type == TOKEN_ERROR) {
+            print_lexer_error(path, token);
+            break;
+        }
 
         print_token(token);
 
@@ -518,7 +554,7 @@ int main(int argc, char **argv) {
     }
 
     if (print_token_mode) {
-        print_tokens(source);
+        print_tokens(path, source);
     } else {
         print_source(source);
     }
