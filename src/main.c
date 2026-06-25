@@ -71,10 +71,11 @@ static void print_help(void) {
     printf("Usage:\n");
     printf("  newt <file.nt>\n");
     printf("  newt --tokens <file.nt>\n");
+    printf("  newt --parse <file.nt>\n");
     printf("  newt --help\n");
     printf("  newt --version\n");
     printf("\n");
-    printf("Phase 1: reads .nt source files and can print tokens.\n");
+    printf("Phase 2: reads .nt source files, can print tokens, and can debug-print a parse tree.\n");
 }
 
 static char *read_file(const char *path) {
@@ -504,6 +505,379 @@ static void print_tokens(const char *path, const char *source) {
     }
 }
 
+typedef enum {
+    EXPR_NUMBER,
+    EXPR_IDENT,
+    EXPR_STRING,
+    EXPR_TRUE,
+    EXPR_FALSE,
+    EXPR_BINARY
+} ExprKind;
+
+typedef struct Expr Expr;
+
+typedef enum {
+    STMT_VAL_DECL,
+    STMT_PRINT
+} StmtKind;
+
+typedef struct {
+    StmtKind kind;
+    Token name;
+    Expr *expression;
+} Stmt;
+
+struct Expr {
+    ExprKind kind;
+    Token token;
+    Expr *left;
+    Expr *right;
+};
+
+typedef struct {
+    Lexer lexer;
+    Token current;
+    Token previous;
+    const char *path;
+    int had_error;
+    Expr expressions[1024];
+    int expression_count;
+    Stmt statements[256];
+    int statement_count;
+} Parser;
+
+static void parser_init(Parser *parser, const char *path, const char *source) {
+    lexer_init(&parser->lexer, source);
+    parser->path = path;
+    parser->had_error = 0;
+    parser->expression_count = 0;
+    parser->statement_count = 0;
+    parser->current.type = TOKEN_EOF;
+    parser->current.start = source;
+    parser->current.length = 0;
+    parser->current.line = 1;
+    parser->current.column = 1;
+    parser->current.error_message = NULL;
+    parser->previous = parser->current;
+}
+
+static void parser_error(Parser *parser, Token token, const char *message) {
+    if (parser->had_error) {
+        return;
+    }
+
+    printf("%s:%d:%d: parse error: %s\n",
+           parser->path,
+           token.line,
+           token.column,
+           message);
+    parser->had_error = 1;
+}
+
+static void parser_advance(Parser *parser) {
+    parser->previous = parser->current;
+    parser->current = next_token(&parser->lexer);
+
+    if (parser->current.type == TOKEN_ERROR) {
+        print_lexer_error(parser->path, parser->current);
+        parser->had_error = 1;
+    }
+}
+
+static int parser_match(Parser *parser, TokenType type) {
+    if (parser->current.type != type) {
+        return 0;
+    }
+
+    parser_advance(parser);
+    return 1;
+}
+
+static void parser_consume(Parser *parser, TokenType type, const char *message) {
+    if (parser->current.type == type) {
+        parser_advance(parser);
+        return;
+    }
+
+    parser_error(parser, parser->current, message);
+}
+
+static void parser_skip_newlines(Parser *parser) {
+    while (!parser->had_error && parser->current.type == TOKEN_NEWLINE) {
+        parser_advance(parser);
+    }
+}
+
+static Expr *new_expr(Parser *parser, ExprKind kind, Token token) {
+    Expr *expr;
+
+    if (parser->expression_count >= 1024) {
+        parser_error(parser, token, "too many expressions");
+        return NULL;
+    }
+
+    expr = &parser->expressions[parser->expression_count];
+    parser->expression_count++;
+    expr->kind = kind;
+    expr->token = token;
+    expr->left = NULL;
+    expr->right = NULL;
+    return expr;
+}
+
+static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expression) {
+    Stmt *stmt;
+
+    if (parser->statement_count >= 256) {
+        parser_error(parser, name, "too many statements");
+        return NULL;
+    }
+
+    stmt = &parser->statements[parser->statement_count];
+    parser->statement_count++;
+    stmt->kind = kind;
+    stmt->name = name;
+    stmt->expression = expression;
+    return stmt;
+}
+
+static Expr *parse_expression(Parser *parser);
+
+static Expr *parse_primary(Parser *parser) {
+    if (parser_match(parser, TOKEN_NUMBER)) {
+        return new_expr(parser, EXPR_NUMBER, parser->previous);
+    }
+    if (parser_match(parser, TOKEN_IDENT)) {
+        return new_expr(parser, EXPR_IDENT, parser->previous);
+    }
+    if (parser_match(parser, TOKEN_STRING)) {
+        return new_expr(parser, EXPR_STRING, parser->previous);
+    }
+    if (parser_match(parser, TOKEN_TRUE)) {
+        return new_expr(parser, EXPR_TRUE, parser->previous);
+    }
+    if (parser_match(parser, TOKEN_FALSE)) {
+        return new_expr(parser, EXPR_FALSE, parser->previous);
+    }
+    if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+        Expr *expr = parse_expression(parser);
+        parser_consume(parser, TOKEN_RIGHT_PAREN, "expected ')' after expression");
+        return expr;
+    }
+
+    parser_error(parser, parser->current, "expected expression");
+    return NULL;
+}
+
+static Expr *parse_factor(Parser *parser) {
+    Expr *left = parse_primary(parser);
+
+    while (!parser->had_error &&
+           (parser->current.type == TOKEN_STAR || parser->current.type == TOKEN_SLASH)) {
+        Token operator_token;
+        Expr *binary;
+        Expr *right;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        right = parse_primary(parser);
+        if (right == NULL) {
+            return NULL;
+        }
+
+        binary = new_expr(parser, EXPR_BINARY, operator_token);
+        if (binary == NULL) {
+            return NULL;
+        }
+        binary->left = left;
+        binary->right = right;
+        left = binary;
+    }
+
+    return left;
+}
+
+static Expr *parse_term(Parser *parser) {
+    Expr *left = parse_factor(parser);
+
+    while (!parser->had_error &&
+           (parser->current.type == TOKEN_PLUS || parser->current.type == TOKEN_MINUS)) {
+        Token operator_token;
+        Expr *binary;
+        Expr *right;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        right = parse_factor(parser);
+        if (right == NULL) {
+            return NULL;
+        }
+
+        binary = new_expr(parser, EXPR_BINARY, operator_token);
+        if (binary == NULL) {
+            return NULL;
+        }
+        binary->left = left;
+        binary->right = right;
+        left = binary;
+    }
+
+    return left;
+}
+
+static Expr *parse_expression(Parser *parser) {
+    return parse_term(parser);
+}
+
+static void print_indent(int spaces) {
+    int i;
+
+    for (i = 0; i < spaces; i++) {
+        putchar(' ');
+    }
+}
+
+static void print_expression_tree(Expr *expr, int indent) {
+    if (expr == NULL) {
+        return;
+    }
+
+    print_indent(indent);
+
+    switch (expr->kind) {
+        case EXPR_NUMBER:
+            printf("NUMBER %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_IDENT:
+            printf("IDENT %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_STRING:
+            printf("STRING %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_TRUE:
+            printf("TRUE %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_FALSE:
+            printf("FALSE %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_BINARY:
+            printf("BINARY %.*s\n", expr->token.length, expr->token.start);
+            print_expression_tree(expr->left, indent + 2);
+            print_expression_tree(expr->right, indent + 2);
+            break;
+    }
+}
+
+static void parser_consume_statement_end(Parser *parser) {
+    if (parser->current.type == TOKEN_NEWLINE) {
+        parser_skip_newlines(parser);
+        return;
+    }
+
+    if (parser->current.type == TOKEN_EOF) {
+        return;
+    }
+
+    parser_error(parser, parser->current, "expected end of statement");
+}
+
+static void parse_val_declaration(Parser *parser) {
+    Token name;
+    Expr *initializer;
+
+    parser_consume(parser, TOKEN_IDENT, "expected variable name after 'val'");
+    if (parser->had_error) {
+        return;
+    }
+    name = parser->previous;
+
+    parser_consume(parser, TOKEN_EQUAL, "expected '=' after variable name");
+    if (parser->had_error) {
+        return;
+    }
+
+    initializer = parse_expression(parser);
+    if (parser->had_error) {
+        return;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return;
+    }
+
+    new_stmt(parser, STMT_VAL_DECL, name, initializer);
+}
+
+static void parse_print_statement(Parser *parser) {
+    Expr *expr = parse_expression(parser);
+
+    if (parser->had_error) {
+        return;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return;
+    }
+
+    new_stmt(parser, STMT_PRINT, parser->previous, expr);
+}
+
+static void parse_statement(Parser *parser) {
+    if (parser_match(parser, TOKEN_VAL)) {
+        parse_val_declaration(parser);
+        return;
+    }
+
+    if (parser_match(parser, TOKEN_PRINT)) {
+        parse_print_statement(parser);
+        return;
+    }
+
+    parser_error(parser, parser->current, "expected statement");
+}
+
+static void print_statement_tree(Stmt *stmt) {
+    switch (stmt->kind) {
+        case STMT_VAL_DECL:
+            printf("  VAL_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_expression_tree(stmt->expression, 4);
+            break;
+        case STMT_PRINT:
+            printf("  PRINT\n");
+            print_expression_tree(stmt->expression, 4);
+            break;
+    }
+}
+
+static void print_parse_tree(const char *path, const char *source) {
+    Parser parser;
+
+    parser_init(&parser, path, source);
+    parser_advance(&parser);
+
+    if (parser.had_error) {
+        return;
+    }
+
+    parser_skip_newlines(&parser);
+
+    while (!parser.had_error && parser.current.type != TOKEN_EOF) {
+        parse_statement(&parser);
+        parser_skip_newlines(&parser);
+    }
+
+    if (!parser.had_error) {
+        int i;
+
+        printf("PROGRAM\n");
+        for (i = 0; i < parser.statement_count; i++) {
+            print_statement_tree(&parser.statements[i]);
+        }
+        printf("EOF\n");
+    }
+}
 static void print_source(const char *source) {
     fputs(source, stdout);
 
@@ -517,6 +891,7 @@ static void print_source(const char *source) {
 
 int main(int argc, char **argv) {
     int print_token_mode = 0;
+    int parse_mode = 0;
     const char *path = NULL;
 
     if (argc < 2) {
@@ -544,6 +919,15 @@ int main(int argc, char **argv) {
 
         print_token_mode = 1;
         path = argv[2];
+    } else if (strcmp(argv[1], "--parse") == 0) {
+        if (argc < 3) {
+            printf("error: missing input file\n");
+            printf("usage: newt --parse <file.nt>\n");
+            return 1;
+        }
+
+        parse_mode = 1;
+        path = argv[2];
     } else {
         path = argv[1];
     }
@@ -555,6 +939,8 @@ int main(int argc, char **argv) {
 
     if (print_token_mode) {
         print_tokens(path, source);
+    } else if (parse_mode) {
+        print_parse_tree(path, source);
     } else {
         print_source(source);
     }
