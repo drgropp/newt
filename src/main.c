@@ -785,7 +785,7 @@ static void parse_val_declaration(Parser *parser) {
     Token name;
     Expr *initializer;
 
-    parser_consume(parser, TOKEN_IDENT, "expected variable name after 'val'");
+    parser_consume(parser, TOKEN_IDENT, "expected identifier after val");
     if (parser->had_error) {
         return;
     }
