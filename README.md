@@ -8,7 +8,7 @@ The goal is to create a lightweight, readable language for:
 * CLI/TUI apps
 * math scripts
 * game tooling
-* future interop with C, Python, Julia, Typecript etc.
+* future interop with C, Python, Julia, TypeScript etc.
 
 Newt is currently very early. Right now it is focused on the language frontend: reading source files, tokenizing them, and parsing simple program structure.
 
@@ -205,5 +205,10 @@ Newt should be small, readable, and practical.
 
 The language should be easy to write, easy to embed, and easy to understand.
 
+Newt is not ready for real-world use yet. It is currently an experimental language frontend under active development.
 
-License not chosen yet.
+## License
+
+No license has been chosen yet.
+
+Copyright © 2026 drgropp. All rights reserved.
