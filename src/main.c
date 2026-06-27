@@ -1,9 +1,15 @@
+/*
+Newt
+A small experimental scripting language built in C.
+Created by drgropp.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
-#define NEWT_VERSION "0.0.1"
+#define NEWT_VERSION "0.1.0-dev"
 
 typedef enum {
     TOKEN_EOF,
@@ -74,6 +80,7 @@ static void print_help(void) {
     printf("  newt --parse <file.nt>\n");
     printf("  newt --help\n");
     printf("  newt --version\n");
+    printf("  newt --about\n");
     printf("\n");
     printf("Phase 2: reads .nt source files, can print tokens, and can debug-print a parse tree.\n");
 }
@@ -907,6 +914,13 @@ int main(int argc, char **argv) {
 
     if (strcmp(argv[1], "--version") == 0) {
         printf("Newt %s\n", NEWT_VERSION);
+        printf("created by drgropp\n");
+        return 0;
+    }
+
+    if (strcmp(argv[1], "--about") == 0) {
+        printf("Newt is a small experimental scripting language built in C.\n");
+        printf("Created by drgropp.\n");
         return 0;
     }
 
