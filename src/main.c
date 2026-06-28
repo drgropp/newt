@@ -914,7 +914,6 @@ int main(int argc, char **argv) {
 
     if (strcmp(argv[1], "--version") == 0) {
         printf("Newt %s\n", NEWT_VERSION);
-        printf("created by drgropp\n");
         return 0;
     }
 
