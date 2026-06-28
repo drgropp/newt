@@ -525,6 +525,7 @@ typedef struct Expr Expr;
 
 typedef enum {
     STMT_VAL_DECL,
+    STMT_MUT_DECL,
     STMT_PRINT
 } StmtKind;
 
@@ -788,11 +789,13 @@ static void parser_consume_statement_end(Parser *parser) {
     parser_error(parser, parser->current, "expected end of statement");
 }
 
-static void parse_val_declaration(Parser *parser) {
+static void parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
     Token name;
     Expr *initializer;
+    char message[64];
 
-    parser_consume(parser, TOKEN_IDENT, "expected identifier after val");
+    snprintf(message, sizeof(message), "expected identifier after %s", keyword);
+    parser_consume(parser, TOKEN_IDENT, message);
     if (parser->had_error) {
         return;
     }
@@ -813,7 +816,7 @@ static void parse_val_declaration(Parser *parser) {
         return;
     }
 
-    new_stmt(parser, STMT_VAL_DECL, name, initializer);
+    new_stmt(parser, kind, name, initializer);
 }
 
 static void parse_print_statement(Parser *parser) {
@@ -833,7 +836,12 @@ static void parse_print_statement(Parser *parser) {
 
 static void parse_statement(Parser *parser) {
     if (parser_match(parser, TOKEN_VAL)) {
-        parse_val_declaration(parser);
+        parse_declaration(parser, STMT_VAL_DECL, "val");
+        return;
+    }
+
+    if (parser_match(parser, TOKEN_MUT)) {
+        parse_declaration(parser, STMT_MUT_DECL, "mut");
         return;
     }
 
@@ -849,6 +857,10 @@ static void print_statement_tree(Stmt *stmt) {
     switch (stmt->kind) {
         case STMT_VAL_DECL:
             printf("  VAL_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_expression_tree(stmt->expression, 4);
+            break;
+        case STMT_MUT_DECL:
+            printf("  MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
             print_expression_tree(stmt->expression, 4);
             break;
         case STMT_PRINT:
