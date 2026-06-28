@@ -519,7 +519,8 @@ typedef enum {
     EXPR_STRING,
     EXPR_TRUE,
     EXPR_FALSE,
-    EXPR_BINARY
+    EXPR_BINARY,
+    EXPR_INPUT_NUMBER
 } ExprKind;
 
 typedef struct Expr Expr;
@@ -690,7 +691,30 @@ static Expr *parse_primary(Parser *parser) {
         return new_expr(parser, EXPR_NUMBER, parser->previous);
     }
     if (parser_match(parser, TOKEN_IDENT)) {
-        return new_expr(parser, EXPR_IDENT, parser->previous);
+        Token name = parser->previous;
+
+        if (token_text_equals(name, "input_number") && parser_match(parser, TOKEN_LEFT_PAREN)) {
+            Expr *expr;
+
+            parser_consume(parser, TOKEN_STRING, "expected string literal prompt for input_number");
+            if (parser->had_error) {
+                return NULL;
+            }
+
+            expr = new_expr(parser, EXPR_INPUT_NUMBER, parser->previous);
+            if (expr == NULL) {
+                return NULL;
+            }
+
+            parser_consume(parser, TOKEN_RIGHT_PAREN, "expected ')' after input_number prompt");
+            if (parser->had_error) {
+                return NULL;
+            }
+
+            return expr;
+        }
+
+        return new_expr(parser, EXPR_IDENT, name);
     }
     if (parser_match(parser, TOKEN_STRING)) {
         return new_expr(parser, EXPR_STRING, parser->previous);
@@ -865,6 +889,9 @@ static void print_expression_tree(Expr *expr, int indent) {
             printf("BINARY %.*s\n", expr->token.length, expr->token.start);
             print_expression_tree(expr->left, indent + 2);
             print_expression_tree(expr->right, indent + 2);
+            break;
+        case EXPR_INPUT_NUMBER:
+            printf("INPUT_NUMBER %.*s\n", expr->token.length, expr->token.start);
             break;
     }
 }
@@ -1201,6 +1228,20 @@ static int read_number_token(Interpreter *interpreter, Token token, double *valu
     return 1;
 }
 
+static int read_input_number(Interpreter *interpreter, Token prompt, double *value) {
+    if (prompt.length >= 2) {
+        printf("%.*s", prompt.length - 2, prompt.start + 1);
+    }
+    fflush(stdout);
+
+    if (scanf("%lf", value) != 1) {
+        runtime_error(interpreter, prompt, "expected number from input_number");
+        return 0;
+    }
+
+    return 1;
+}
+
 static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) {
     double left;
     double right;
@@ -1212,6 +1253,8 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) 
     switch (expr->kind) {
         case EXPR_NUMBER:
             return read_number_token(interpreter, expr->token, value);
+        case EXPR_INPUT_NUMBER:
+            return read_input_number(interpreter, expr->token, value);
         case EXPR_IDENT: {
             Variable *variable = find_variable(interpreter, expr->token);
             if (variable == NULL) {
