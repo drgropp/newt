@@ -211,30 +211,55 @@ newt/
 
 ## Roadmap
 
+### Phase 0 — Runner
 
-### Phase 1 — Parser
+Read `.nt` files and support basic CLI behavior.
+
+Status: mostly complete.
+
+### Phase 1 — Lexer
+
+Turn source text into tokens with useful line/column information and lexer errors.
+
+Status: mostly complete.
+
+### Phase 2 — Parser
 
 Parse tokens into program structure and report syntax errors.
 
-### Phase 2 — AST
+Status: active.
 
-Store parsed programs in real AST data structures.
+### Phase 3 — AST / Execution
 
-### Phase 3 — Interpreter
+Represent parsed programs and execute simple Newt code.
 
-Execute simple Newt programs.
+Current support includes numeric expressions, `val`, `mut`, assignment, variable lookup, and numeric `print`.
+
+Status: started.
 
 ### Phase 4 — Variables, Scope, and Blocks
 
-Support assignment, `if`, `else`, `while`, and block scoping.
+Support better variable rules, block execution, `if`, `else`, `while`, and scope behavior.
+
+Status: planned.
 
 ### Phase 5 — Functions
 
 Support function declarations, calls, parameters, and return values.
 
+Status: planned.
+
 ### Phase 6 — Standard Library Seeds
 
 Add early built-ins for math, filesystem tools, terminal UI helpers, and future interop experiments.
+
+Status: planned.
+
+### Phase 7 — Interop Experiments
+
+Explore calling into or from C, Python, Julia, TypeScript, and other host languages.
+
+Status: future.
 
 ## Philosophy
 
