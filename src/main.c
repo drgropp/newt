@@ -1291,6 +1291,30 @@ static void print_number(double value) {
     }
 }
 
+static void print_string_token(Token token) {
+    if (token.length >= 2) {
+        printf("%.*s\n", token.length - 2, token.start + 1);
+    } else {
+        printf("\n");
+    }
+}
+
+static int print_runtime_expression(Interpreter *interpreter, Expr *expr) {
+    double value;
+
+    if (expr != NULL && expr->kind == EXPR_STRING) {
+        print_string_token(expr->token);
+        return 1;
+    }
+
+    if (!eval_expression(interpreter, expr, &value)) {
+        return 0;
+    }
+
+    print_number(value);
+    return 1;
+}
+
 static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
     double value;
 
@@ -1326,11 +1350,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             return 1;
         }
         case STMT_PRINT:
-            if (!eval_expression(interpreter, stmt->expression, &value)) {
-                return 0;
-            }
-            print_number(value);
-            return 1;
+            return print_runtime_expression(interpreter, stmt->expression);
         case STMT_IF:
             runtime_error(interpreter, stmt->name, "if statements are not supported by --run yet");
             return 0;
