@@ -78,6 +78,7 @@ static void print_help(void) {
     printf("  newt <file.nt>\n");
     printf("  newt --tokens <file.nt>\n");
     printf("  newt --parse <file.nt>\n");
+    printf("  newt --run <file.nt>\n");
     printf("  newt --help\n");
     printf("  newt --version\n");
     printf("  newt --about\n");
@@ -535,9 +536,9 @@ typedef struct {
     StmtKind kind;
     Token name;
     Expr *expression;
-    int then_start;
+    int then_statements[256];
     int then_count;
-    int else_start;
+    int else_statements[256];
     int else_count;
     int has_else;
 } Stmt;
@@ -559,8 +560,6 @@ typedef struct {
     int expression_count;
     Stmt statements[256];
     int statement_count;
-    int statement_refs[1024];
-    int statement_ref_count;
     int top_level_statements[256];
     int top_level_statement_count;
 } Parser;
@@ -571,7 +570,6 @@ static void parser_init(Parser *parser, const char *path, const char *source) {
     parser->had_error = 0;
     parser->expression_count = 0;
     parser->statement_count = 0;
-    parser->statement_ref_count = 0;
     parser->top_level_statement_count = 0;
     parser->current.type = TOKEN_EOF;
     parser->current.start = source;
@@ -659,9 +657,7 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->kind = kind;
     stmt->name = name;
     stmt->expression = expression;
-    stmt->then_start = 0;
     stmt->then_count = 0;
-    stmt->else_start = 0;
     stmt->else_count = 0;
     stmt->has_else = 0;
     return stmt;
@@ -953,11 +949,8 @@ static Stmt *parse_assignment_statement(Parser *parser) {
     return new_stmt(parser, STMT_ASSIGN, name, expr);
 }
 
-static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int *start, int *count) {
-    int direct_statements[256];
-    int direct_count = 0;
-    int i;
-
+static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int statements[256], int *count) {
+    *count = 0;
     parser_skip_newlines(parser);
 
     while (!parser->had_error &&
@@ -966,27 +959,14 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
            parser->current.type != stop_two) {
         Stmt *stmt = parse_statement(parser);
         if (stmt != NULL) {
-            if (direct_count >= 256) {
+            if (*count >= 256) {
                 parser_error(parser, stmt->name, "too many block statements");
                 return;
             }
-            direct_statements[direct_count] = statement_index(parser, stmt);
-            direct_count++;
+            statements[*count] = statement_index(parser, stmt);
+            (*count)++;
         }
         parser_skip_newlines(parser);
-    }
-
-    if (parser->statement_ref_count + direct_count > 1024) {
-        parser_error(parser, parser->current, "too many block statements");
-        return;
-    }
-
-    *start = parser->statement_ref_count;
-    *count = direct_count;
-
-    for (i = 0; i < direct_count; i++) {
-        parser->statement_refs[parser->statement_ref_count] = direct_statements[i];
-        parser->statement_ref_count++;
     }
 }
 
@@ -994,11 +974,12 @@ static Stmt *parse_if_statement(Parser *parser) {
     Token if_token = parser->previous;
     Expr *condition;
     Stmt *stmt;
-    int then_start;
+    int then_statements[256];
     int then_count;
-    int else_start = 0;
+    int else_statements[256];
     int else_count = 0;
     int has_else = 0;
+    int i;
 
     condition = parse_expression(parser);
     if (parser->had_error) {
@@ -1010,7 +991,7 @@ static Stmt *parse_if_statement(Parser *parser) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_ELSE, TOKEN_END, &then_start, &then_count);
+    parse_block(parser, TOKEN_ELSE, TOKEN_END, then_statements, &then_count);
     if (parser->had_error) {
         return NULL;
     }
@@ -1022,7 +1003,7 @@ static Stmt *parse_if_statement(Parser *parser) {
             return NULL;
         }
 
-        parse_block(parser, TOKEN_END, TOKEN_END, &else_start, &else_count);
+        parse_block(parser, TOKEN_END, TOKEN_END, else_statements, &else_count);
         if (parser->had_error) {
             return NULL;
         }
@@ -1043,9 +1024,13 @@ static Stmt *parse_if_statement(Parser *parser) {
         return NULL;
     }
 
-    stmt->then_start = then_start;
+    for (i = 0; i < then_count; i++) {
+        stmt->then_statements[i] = then_statements[i];
+    }
+    for (i = 0; i < else_count; i++) {
+        stmt->else_statements[i] = else_statements[i];
+    }
     stmt->then_count = then_count;
-    stmt->else_start = else_start;
     stmt->else_count = else_count;
     stmt->has_else = has_else;
     return stmt;
@@ -1104,14 +1089,14 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             print_indent(indent + 2);
             printf("THEN\n");
             for (i = 0; i < stmt->then_count; i++) {
-                int stmt_index = parser->statement_refs[stmt->then_start + i];
+                int stmt_index = stmt->then_statements[i];
                 print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
             }
             if (stmt->has_else) {
                 print_indent(indent + 2);
                 printf("ELSE\n");
                 for (i = 0; i < stmt->else_count; i++) {
-                    int stmt_index = parser->statement_refs[stmt->else_start + i];
+                    int stmt_index = stmt->else_statements[i];
                     print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
                 }
             }
@@ -1124,35 +1109,256 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
     }
 }
 
+static int parse_program(Parser *parser) {
+    parser_advance(parser);
+
+    if (parser->had_error) {
+        return 0;
+    }
+
+    parser_skip_newlines(parser);
+
+    while (!parser->had_error && parser->current.type != TOKEN_EOF) {
+        Stmt *stmt = parse_statement(parser);
+        add_top_level_statement(parser, stmt);
+        parser_skip_newlines(parser);
+    }
+
+    return !parser->had_error;
+}
+
 static void print_parse_tree(const char *path, const char *source) {
     Parser parser;
+    int i;
 
     parser_init(&parser, path, source);
-    parser_advance(&parser);
-
-    if (parser.had_error) {
+    if (!parse_program(&parser)) {
         return;
     }
 
-    parser_skip_newlines(&parser);
+    printf("PROGRAM\n");
+    for (i = 0; i < parser.top_level_statement_count; i++) {
+        int stmt_index = parser.top_level_statements[i];
+        print_statement_tree(&parser, &parser.statements[stmt_index], 2);
+    }
+    printf("EOF\n");
+}
 
-    while (!parser.had_error && parser.current.type != TOKEN_EOF) {
-        Stmt *stmt = parse_statement(&parser);
-        add_top_level_statement(&parser, stmt);
-        parser_skip_newlines(&parser);
+typedef struct {
+    Token name;
+    double value;
+    int is_mutable;
+} Variable;
+
+typedef struct {
+    Parser *parser;
+    Variable variables[256];
+    int variable_count;
+    int had_error;
+} Interpreter;
+
+static int token_names_match(Token left, Token right) {
+    return left.length == right.length &&
+           strncmp(left.start, right.start, (size_t)left.length) == 0;
+}
+
+static void runtime_error(Interpreter *interpreter, Token token, const char *message) {
+    if (interpreter->had_error) {
+        return;
     }
 
-    if (!parser.had_error) {
-        int i;
+    printf("%s:%d:%d: runtime error: %s\n",
+           interpreter->parser->path,
+           token.line,
+           token.column,
+           message);
+    interpreter->had_error = 1;
+}
 
-        printf("PROGRAM\n");
-        for (i = 0; i < parser.top_level_statement_count; i++) {
-            int stmt_index = parser.top_level_statements[i];
-            print_statement_tree(&parser, &parser.statements[stmt_index], 2);
+static Variable *find_variable(Interpreter *interpreter, Token name) {
+    int i;
+
+    for (i = 0; i < interpreter->variable_count; i++) {
+        if (token_names_match(interpreter->variables[i].name, name)) {
+            return &interpreter->variables[i];
         }
-        printf("EOF\n");
+    }
+
+    return NULL;
+}
+
+static int read_number_token(Interpreter *interpreter, Token token, double *value) {
+    char text[64];
+
+    if (token.length >= (int)sizeof(text)) {
+        runtime_error(interpreter, token, "number is too long");
+        return 0;
+    }
+
+    memcpy(text, token.start, (size_t)token.length);
+    text[token.length] = '\0';
+    *value = strtod(text, NULL);
+    return 1;
+}
+
+static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) {
+    double left;
+    double right;
+
+    if (expr == NULL || interpreter->had_error) {
+        return 0;
+    }
+
+    switch (expr->kind) {
+        case EXPR_NUMBER:
+            return read_number_token(interpreter, expr->token, value);
+        case EXPR_IDENT: {
+            Variable *variable = find_variable(interpreter, expr->token);
+            if (variable == NULL) {
+                runtime_error(interpreter, expr->token, "unknown variable");
+                return 0;
+            }
+            *value = variable->value;
+            return 1;
+        }
+        case EXPR_BINARY:
+            if (!eval_expression(interpreter, expr->left, &left)) {
+                return 0;
+            }
+            if (!eval_expression(interpreter, expr->right, &right)) {
+                return 0;
+            }
+
+            switch (expr->token.type) {
+                case TOKEN_PLUS:
+                    *value = left + right;
+                    return 1;
+                case TOKEN_MINUS:
+                    *value = left - right;
+                    return 1;
+                case TOKEN_STAR:
+                    *value = left * right;
+                    return 1;
+                case TOKEN_SLASH:
+                    if (right == 0) {
+                        runtime_error(interpreter, expr->token, "division by zero");
+                        return 0;
+                    }
+                    *value = left / right;
+                    return 1;
+                default:
+                    runtime_error(interpreter, expr->token, "unsupported runtime operator");
+                    return 0;
+            }
+        case EXPR_STRING:
+        case EXPR_TRUE:
+        case EXPR_FALSE:
+            runtime_error(interpreter, expr->token, "only numeric expressions can run for now");
+            return 0;
+    }
+
+    return 0;
+}
+
+static int define_variable(Interpreter *interpreter, Token name, double value, int is_mutable) {
+    Variable *existing;
+
+    existing = find_variable(interpreter, name);
+    if (existing != NULL) {
+        runtime_error(interpreter, name, "variable already defined");
+        return 0;
+    }
+
+    if (interpreter->variable_count >= 256) {
+        runtime_error(interpreter, name, "too many variables");
+        return 0;
+    }
+
+    interpreter->variables[interpreter->variable_count].name = name;
+    interpreter->variables[interpreter->variable_count].value = value;
+    interpreter->variables[interpreter->variable_count].is_mutable = is_mutable;
+    interpreter->variable_count++;
+    return 1;
+}
+
+static void print_number(double value) {
+    long long whole = (long long)value;
+
+    if (value == (double)whole) {
+        printf("%lld\n", whole);
+    } else {
+        printf("%g\n", value);
     }
 }
+
+static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
+    double value;
+
+    if (interpreter->had_error) {
+        return 0;
+    }
+
+    switch (stmt->kind) {
+        case STMT_VAL_DECL:
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
+                return 0;
+            }
+            return define_variable(interpreter, stmt->name, value, 0);
+        case STMT_MUT_DECL:
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
+                return 0;
+            }
+            return define_variable(interpreter, stmt->name, value, 1);
+        case STMT_ASSIGN: {
+            Variable *variable = find_variable(interpreter, stmt->name);
+            if (variable == NULL) {
+                runtime_error(interpreter, stmt->name, "unknown variable");
+                return 0;
+            }
+            if (!variable->is_mutable) {
+                runtime_error(interpreter, stmt->name, "cannot assign to val");
+                return 0;
+            }
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
+                return 0;
+            }
+            variable->value = value;
+            return 1;
+        }
+        case STMT_PRINT:
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
+                return 0;
+            }
+            print_number(value);
+            return 1;
+        case STMT_IF:
+            runtime_error(interpreter, stmt->name, "if statements are not supported by --run yet");
+            return 0;
+    }
+
+    return 0;
+}
+
+static void run_program(const char *path, const char *source) {
+    Parser parser;
+    Interpreter interpreter;
+    int i;
+
+    parser_init(&parser, path, source);
+    if (!parse_program(&parser)) {
+        return;
+    }
+
+    interpreter.parser = &parser;
+    interpreter.variable_count = 0;
+    interpreter.had_error = 0;
+
+    for (i = 0; i < parser.top_level_statement_count && !interpreter.had_error; i++) {
+        int stmt_index = parser.top_level_statements[i];
+        execute_statement(&interpreter, &parser.statements[stmt_index]);
+    }
+}
+
 static void print_source(const char *source) {
     fputs(source, stdout);
 
@@ -1167,6 +1373,7 @@ static void print_source(const char *source) {
 int main(int argc, char **argv) {
     int print_token_mode = 0;
     int parse_mode = 0;
+    int run_mode = 0;
     const char *path = NULL;
 
     if (argc < 2) {
@@ -1209,6 +1416,15 @@ int main(int argc, char **argv) {
 
         parse_mode = 1;
         path = argv[2];
+    } else if (strcmp(argv[1], "--run") == 0) {
+        if (argc < 3) {
+            printf("error: missing input file\n");
+            printf("usage: newt --run <file.nt>\n");
+            return 1;
+        }
+
+        run_mode = 1;
+        path = argv[2];
     } else {
         path = argv[1];
     }
@@ -1222,6 +1438,8 @@ int main(int argc, char **argv) {
         print_tokens(path, source);
     } else if (parse_mode) {
         print_parse_tree(path, source);
+    } else if (run_mode) {
+        run_program(path, source);
     } else {
         print_source(source);
     }
