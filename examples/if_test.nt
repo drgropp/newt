@@ -1,0 +1,7 @@
+mut hp = 100
+if hp >= 50
+print "healthy"
+else
+print "healthy"
+print "low hp"
+end

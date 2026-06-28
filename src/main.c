@@ -527,6 +527,7 @@ typedef enum {
     STMT_VAL_DECL,
     STMT_MUT_DECL,
     STMT_ASSIGN,
+    STMT_IF,
     STMT_PRINT
 } StmtKind;
 
@@ -534,6 +535,11 @@ typedef struct {
     StmtKind kind;
     Token name;
     Expr *expression;
+    int then_start;
+    int then_count;
+    int else_start;
+    int else_count;
+    int has_else;
 } Stmt;
 
 struct Expr {
@@ -553,6 +559,10 @@ typedef struct {
     int expression_count;
     Stmt statements[256];
     int statement_count;
+    int statement_refs[1024];
+    int statement_ref_count;
+    int top_level_statements[256];
+    int top_level_statement_count;
 } Parser;
 
 static void parser_init(Parser *parser, const char *path, const char *source) {
@@ -561,6 +571,8 @@ static void parser_init(Parser *parser, const char *path, const char *source) {
     parser->had_error = 0;
     parser->expression_count = 0;
     parser->statement_count = 0;
+    parser->statement_ref_count = 0;
+    parser->top_level_statement_count = 0;
     parser->current.type = TOKEN_EOF;
     parser->current.start = source;
     parser->current.length = 0;
@@ -647,10 +659,35 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->kind = kind;
     stmt->name = name;
     stmt->expression = expression;
+    stmt->then_start = 0;
+    stmt->then_count = 0;
+    stmt->else_start = 0;
+    stmt->else_count = 0;
+    stmt->has_else = 0;
     return stmt;
 }
 
+static int statement_index(Parser *parser, Stmt *stmt) {
+    return (int)(stmt - parser->statements);
+}
+
+
+static void add_top_level_statement(Parser *parser, Stmt *stmt) {
+    if (stmt == NULL || parser->had_error) {
+        return;
+    }
+
+    if (parser->top_level_statement_count >= 256) {
+        parser_error(parser, stmt->name, "too many statements");
+        return;
+    }
+
+    parser->top_level_statements[parser->top_level_statement_count] = statement_index(parser, stmt);
+    parser->top_level_statement_count++;
+}
+
 static Expr *parse_expression(Parser *parser);
+static Stmt *parse_statement(Parser *parser);
 
 static Expr *parse_primary(Parser *parser) {
     if (parser_match(parser, TOKEN_NUMBER)) {
@@ -734,8 +771,67 @@ static Expr *parse_term(Parser *parser) {
     return left;
 }
 
+static Expr *parse_comparison(Parser *parser) {
+    Expr *left = parse_term(parser);
+
+    while (!parser->had_error &&
+           (parser->current.type == TOKEN_LESS ||
+            parser->current.type == TOKEN_LESS_EQUAL ||
+            parser->current.type == TOKEN_GREATER ||
+            parser->current.type == TOKEN_GREATER_EQUAL)) {
+        Token operator_token;
+        Expr *binary;
+        Expr *right;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        right = parse_term(parser);
+        if (right == NULL) {
+            return NULL;
+        }
+
+        binary = new_expr(parser, EXPR_BINARY, operator_token);
+        if (binary == NULL) {
+            return NULL;
+        }
+        binary->left = left;
+        binary->right = right;
+        left = binary;
+    }
+
+    return left;
+}
+
+static Expr *parse_equality(Parser *parser) {
+    Expr *left = parse_comparison(parser);
+
+    while (!parser->had_error &&
+           (parser->current.type == TOKEN_EQUAL_EQUAL || parser->current.type == TOKEN_BANG_EQUAL)) {
+        Token operator_token;
+        Expr *binary;
+        Expr *right;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        right = parse_comparison(parser);
+        if (right == NULL) {
+            return NULL;
+        }
+
+        binary = new_expr(parser, EXPR_BINARY, operator_token);
+        if (binary == NULL) {
+            return NULL;
+        }
+        binary->left = left;
+        binary->right = right;
+        left = binary;
+    }
+
+    return left;
+}
+
 static Expr *parse_expression(Parser *parser) {
-    return parse_term(parser);
+    return parse_equality(parser);
 }
 
 static void print_indent(int spaces) {
@@ -790,7 +886,7 @@ static void parser_consume_statement_end(Parser *parser) {
     parser_error(parser, parser->current, "expected end of statement");
 }
 
-static void parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
+static Stmt *parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
     Token name;
     Expr *initializer;
     char message[64];
@@ -798,106 +894,232 @@ static void parse_declaration(Parser *parser, StmtKind kind, const char *keyword
     snprintf(message, sizeof(message), "expected identifier after %s", keyword);
     parser_consume(parser, TOKEN_IDENT, message);
     if (parser->had_error) {
-        return;
+        return NULL;
     }
     name = parser->previous;
 
     parser_consume(parser, TOKEN_EQUAL, "expected '=' after variable name");
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
     initializer = parse_expression(parser);
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
     parser_consume_statement_end(parser);
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
-    new_stmt(parser, kind, name, initializer);
+    return new_stmt(parser, kind, name, initializer);
 }
 
-static void parse_print_statement(Parser *parser) {
+static Stmt *parse_print_statement(Parser *parser) {
     Expr *expr = parse_expression(parser);
 
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
     parser_consume_statement_end(parser);
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
-    new_stmt(parser, STMT_PRINT, parser->previous, expr);
+    return new_stmt(parser, STMT_PRINT, parser->previous, expr);
 }
 
-static void parse_assignment_statement(Parser *parser) {
+static Stmt *parse_assignment_statement(Parser *parser) {
     Token name = parser->previous;
     Expr *expr;
 
     parser_consume(parser, TOKEN_EQUAL, "expected '=' after assignment name");
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
     expr = parse_expression(parser);
     if (parser->had_error) {
-        return;
+        return NULL;
     }
 
     parser_consume_statement_end(parser);
     if (parser->had_error) {
+        return NULL;
+    }
+
+    return new_stmt(parser, STMT_ASSIGN, name, expr);
+}
+
+static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int *start, int *count) {
+    int direct_statements[256];
+    int direct_count = 0;
+    int i;
+
+    parser_skip_newlines(parser);
+
+    while (!parser->had_error &&
+           parser->current.type != TOKEN_EOF &&
+           parser->current.type != stop_one &&
+           parser->current.type != stop_two) {
+        Stmt *stmt = parse_statement(parser);
+        if (stmt != NULL) {
+            if (direct_count >= 256) {
+                parser_error(parser, stmt->name, "too many block statements");
+                return;
+            }
+            direct_statements[direct_count] = statement_index(parser, stmt);
+            direct_count++;
+        }
+        parser_skip_newlines(parser);
+    }
+
+    if (parser->statement_ref_count + direct_count > 1024) {
+        parser_error(parser, parser->current, "too many block statements");
         return;
     }
 
-    new_stmt(parser, STMT_ASSIGN, name, expr);
+    *start = parser->statement_ref_count;
+    *count = direct_count;
+
+    for (i = 0; i < direct_count; i++) {
+        parser->statement_refs[parser->statement_ref_count] = direct_statements[i];
+        parser->statement_ref_count++;
+    }
 }
 
-static void parse_statement(Parser *parser) {
+static Stmt *parse_if_statement(Parser *parser) {
+    Token if_token = parser->previous;
+    Expr *condition;
+    Stmt *stmt;
+    int then_start;
+    int then_count;
+    int else_start = 0;
+    int else_count = 0;
+    int has_else = 0;
+
+    condition = parse_expression(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parse_block(parser, TOKEN_ELSE, TOKEN_END, &then_start, &then_count);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    if (parser_match(parser, TOKEN_ELSE)) {
+        has_else = 1;
+        parser_consume_statement_end(parser);
+        if (parser->had_error) {
+            return NULL;
+        }
+
+        parse_block(parser, TOKEN_END, TOKEN_END, &else_start, &else_count);
+        if (parser->had_error) {
+            return NULL;
+        }
+    }
+
+    parser_consume(parser, TOKEN_END, "expected 'end' after if statement");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    stmt = new_stmt(parser, STMT_IF, if_token, condition);
+    if (stmt == NULL) {
+        return NULL;
+    }
+
+    stmt->then_start = then_start;
+    stmt->then_count = then_count;
+    stmt->else_start = else_start;
+    stmt->else_count = else_count;
+    stmt->has_else = has_else;
+    return stmt;
+}
+
+static Stmt *parse_statement(Parser *parser) {
     if (parser_match(parser, TOKEN_VAL)) {
-        parse_declaration(parser, STMT_VAL_DECL, "val");
-        return;
+        return parse_declaration(parser, STMT_VAL_DECL, "val");
     }
 
     if (parser_match(parser, TOKEN_MUT)) {
-        parse_declaration(parser, STMT_MUT_DECL, "mut");
-        return;
+        return parse_declaration(parser, STMT_MUT_DECL, "mut");
+    }
+
+    if (parser_match(parser, TOKEN_IF)) {
+        return parse_if_statement(parser);
     }
 
     if (parser_match(parser, TOKEN_PRINT)) {
-        parse_print_statement(parser);
-        return;
+        return parse_print_statement(parser);
     }
 
     if (parser_match(parser, TOKEN_IDENT)) {
-        parse_assignment_statement(parser);
-        return;
+        return parse_assignment_statement(parser);
     }
 
     parser_error(parser, parser->current, "expected statement");
+    return NULL;
 }
 
-static void print_statement_tree(Stmt *stmt) {
+static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
+    int i;
+
     switch (stmt->kind) {
         case STMT_VAL_DECL:
-            printf("  VAL_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
-            print_expression_tree(stmt->expression, 4);
+            print_indent(indent);
+            printf("VAL_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_expression_tree(stmt->expression, indent + 2);
             break;
         case STMT_MUT_DECL:
-            printf("  MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
-            print_expression_tree(stmt->expression, 4);
+            print_indent(indent);
+            printf("MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_expression_tree(stmt->expression, indent + 2);
             break;
         case STMT_ASSIGN:
-            printf("  ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
-            print_expression_tree(stmt->expression, 4);
+            print_indent(indent);
+            printf("ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_expression_tree(stmt->expression, indent + 2);
+            break;
+        case STMT_IF:
+            print_indent(indent);
+            printf("IF\n");
+            print_indent(indent + 2);
+            printf("CONDITION\n");
+            print_expression_tree(stmt->expression, indent + 4);
+            print_indent(indent + 2);
+            printf("THEN\n");
+            for (i = 0; i < stmt->then_count; i++) {
+                int stmt_index = parser->statement_refs[stmt->then_start + i];
+                print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
+            }
+            if (stmt->has_else) {
+                print_indent(indent + 2);
+                printf("ELSE\n");
+                for (i = 0; i < stmt->else_count; i++) {
+                    int stmt_index = parser->statement_refs[stmt->else_start + i];
+                    print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
+                }
+            }
             break;
         case STMT_PRINT:
-            printf("  PRINT\n");
-            print_expression_tree(stmt->expression, 4);
+            print_indent(indent);
+            printf("PRINT\n");
+            print_expression_tree(stmt->expression, indent + 2);
             break;
     }
 }
@@ -915,7 +1137,8 @@ static void print_parse_tree(const char *path, const char *source) {
     parser_skip_newlines(&parser);
 
     while (!parser.had_error && parser.current.type != TOKEN_EOF) {
-        parse_statement(&parser);
+        Stmt *stmt = parse_statement(&parser);
+        add_top_level_statement(&parser, stmt);
         parser_skip_newlines(&parser);
     }
 
@@ -923,8 +1146,9 @@ static void print_parse_tree(const char *path, const char *source) {
         int i;
 
         printf("PROGRAM\n");
-        for (i = 0; i < parser.statement_count; i++) {
-            print_statement_tree(&parser.statements[i]);
+        for (i = 0; i < parser.top_level_statement_count; i++) {
+            int stmt_index = parser.top_level_statements[i];
+            print_statement_tree(&parser, &parser.statements[stmt_index], 2);
         }
         printf("EOF\n");
     }
