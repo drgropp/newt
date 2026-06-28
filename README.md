@@ -47,12 +47,63 @@ Newt currently supports:
 * parser skeleton
 * basic parser error reporting
 * simple expression precedence
+* `val` declarations
+* `mut` declarations
+* assignment statements
+* `if / else / end` parsing
+* basic numeric execution with `--run`
+* variable storage and lookup
+* numeric `print` output
 
 Current example:
 
 ```newt
 val x = 2 + 3 * 4
 print x
+
+mut hp = 100
+hp = hp - 10
+print hp
+```
+
+Run mode:
+
+```sh
+./newt.exe --run examples/run_test.nt
+```
+
+Output:
+
+```txt
+14
+90
+```
+
+Calculator example:
+
+```newt
+val a = 20
+val b = 5
+
+print a + b
+print a - b
+print a * b
+print a / b
+```
+
+Run it:
+
+```sh
+./newt.exe --run examples/calculator.nt
+```
+
+Expected output:
+
+```txt
+25
+15
+100
+4
 ```
 
 Token mode:
@@ -67,20 +118,6 @@ Parse mode:
 ./newt.exe --parse examples/calc.nt
 ```
 
-Example parse output:
-
-```txt
-PROGRAM
-  VAL_DECL name=x
-    BINARY +
-      NUMBER 2
-      BINARY *
-        NUMBER 3
-        NUMBER 4
-  PRINT
-    IDENT x
-EOF
-```
 
 ## Planned Syntax
 
