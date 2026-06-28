@@ -526,6 +526,7 @@ typedef struct Expr Expr;
 typedef enum {
     STMT_VAL_DECL,
     STMT_MUT_DECL,
+    STMT_ASSIGN,
     STMT_PRINT
 } StmtKind;
 
@@ -834,6 +835,28 @@ static void parse_print_statement(Parser *parser) {
     new_stmt(parser, STMT_PRINT, parser->previous, expr);
 }
 
+static void parse_assignment_statement(Parser *parser) {
+    Token name = parser->previous;
+    Expr *expr;
+
+    parser_consume(parser, TOKEN_EQUAL, "expected '=' after assignment name");
+    if (parser->had_error) {
+        return;
+    }
+
+    expr = parse_expression(parser);
+    if (parser->had_error) {
+        return;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return;
+    }
+
+    new_stmt(parser, STMT_ASSIGN, name, expr);
+}
+
 static void parse_statement(Parser *parser) {
     if (parser_match(parser, TOKEN_VAL)) {
         parse_declaration(parser, STMT_VAL_DECL, "val");
@@ -850,6 +873,11 @@ static void parse_statement(Parser *parser) {
         return;
     }
 
+    if (parser_match(parser, TOKEN_IDENT)) {
+        parse_assignment_statement(parser);
+        return;
+    }
+
     parser_error(parser, parser->current, "expected statement");
 }
 
@@ -861,6 +889,10 @@ static void print_statement_tree(Stmt *stmt) {
             break;
         case STMT_MUT_DECL:
             printf("  MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_expression_tree(stmt->expression, 4);
+            break;
+        case STMT_ASSIGN:
+            printf("  ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
             print_expression_tree(stmt->expression, 4);
             break;
         case STMT_PRINT:
