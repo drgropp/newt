@@ -1,0 +1,7 @@
+print "Newt Calculator"
+val a = input_number("a: ")
+val b = input_number("b: ")
+print a + b
+print a - b
+print a * b
+print a / b

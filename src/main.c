@@ -301,6 +301,12 @@ static Token lex_string(Lexer *lexer) {
     return make_error_token(lexer, "unterminated string");
 }
 
+static void lexer_skip_comment(Lexer *lexer) {
+    while (lexer_peek(lexer) != '\n' && !lexer_is_at_end(lexer)) {
+        lexer_advance(lexer);
+    }
+}
+
 static Token next_token(Lexer *lexer) {
     for (;;) {
         lexer_mark_start(lexer);
@@ -313,9 +319,7 @@ static Token next_token(Lexer *lexer) {
         }
 
         if (ch == '#') {
-            while (lexer_peek(lexer) != '\n' && !lexer_is_at_end(lexer)) {
-                lexer_advance(lexer);
-            }
+            lexer_skip_comment(lexer);
             continue;
         }
 
