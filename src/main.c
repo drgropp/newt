@@ -1175,9 +1175,20 @@ static void print_parse_tree(const char *path, const char *source) {
     printf("EOF\n");
 }
 
+typedef enum {
+    VALUE_NUMBER,
+    VALUE_STRING
+} ValueType;
+
+typedef struct {
+    ValueType type;
+    double number;
+    Token string;
+} Value;
+
 typedef struct {
     Token name;
-    double value;
+    Value value;
     int is_mutable;
 } Variable;
 
@@ -1187,6 +1198,28 @@ typedef struct {
     int variable_count;
     int had_error;
 } Interpreter;
+
+static Value make_number_value(double number) {
+    Value value;
+
+    value.type = VALUE_NUMBER;
+    value.number = number;
+    value.string.start = NULL;
+    value.string.length = 0;
+    value.string.line = 0;
+    value.string.column = 0;
+    value.string.error_message = NULL;
+    return value;
+}
+
+static Value make_string_value(Token string) {
+    Value value;
+
+    value.type = VALUE_STRING;
+    value.number = 0;
+    value.string = string;
+    return value;
+}
 
 static int token_names_match(Token left, Token right) {
     return left.length == right.length &&
@@ -1218,7 +1251,7 @@ static Variable *find_variable(Interpreter *interpreter, Token name) {
     return NULL;
 }
 
-static int read_number_token(Interpreter *interpreter, Token token, double *value) {
+static int read_number_token(Interpreter *interpreter, Token token, double *number) {
     char text[64];
 
     if (token.length >= (int)sizeof(text)) {
@@ -1228,17 +1261,17 @@ static int read_number_token(Interpreter *interpreter, Token token, double *valu
 
     memcpy(text, token.start, (size_t)token.length);
     text[token.length] = '\0';
-    *value = strtod(text, NULL);
+    *number = strtod(text, NULL);
     return 1;
 }
 
-static int read_input_number(Interpreter *interpreter, Token prompt, double *value) {
+static int read_input_number(Interpreter *interpreter, Token prompt, double *number) {
     if (prompt.length >= 2) {
         printf("%.*s", prompt.length - 2, prompt.start + 1);
     }
     fflush(stdout);
 
-    if (scanf("%lf", value) != 1) {
+    if (scanf("%lf", number) != 1) {
         runtime_error(interpreter, prompt, "expected number from input_number");
         return 0;
     }
@@ -1246,9 +1279,10 @@ static int read_input_number(Interpreter *interpreter, Token prompt, double *val
     return 1;
 }
 
-static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) {
-    double left;
-    double right;
+static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
+    Value left;
+    Value right;
+    double number;
 
     if (expr == NULL || interpreter->had_error) {
         return 0;
@@ -1256,9 +1290,17 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) 
 
     switch (expr->kind) {
         case EXPR_NUMBER:
-            return read_number_token(interpreter, expr->token, value);
+            if (!read_number_token(interpreter, expr->token, &number)) {
+                return 0;
+            }
+            *value = make_number_value(number);
+            return 1;
         case EXPR_INPUT_NUMBER:
-            return read_input_number(interpreter, expr->token, value);
+            if (!read_input_number(interpreter, expr->token, &number)) {
+                return 0;
+            }
+            *value = make_number_value(number);
+            return 1;
         case EXPR_IDENT: {
             Variable *variable = find_variable(interpreter, expr->token);
             if (variable == NULL) {
@@ -1268,6 +1310,9 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) 
             *value = variable->value;
             return 1;
         }
+        case EXPR_STRING:
+            *value = make_string_value(expr->token);
+            return 1;
         case EXPR_BINARY:
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
@@ -1275,39 +1320,42 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, double *value) 
             if (!eval_expression(interpreter, expr->right, &right)) {
                 return 0;
             }
+            if (left.type != VALUE_NUMBER || right.type != VALUE_NUMBER) {
+                runtime_error(interpreter, expr->token, "numeric operators require numbers");
+                return 0;
+            }
 
             switch (expr->token.type) {
                 case TOKEN_PLUS:
-                    *value = left + right;
+                    *value = make_number_value(left.number + right.number);
                     return 1;
                 case TOKEN_MINUS:
-                    *value = left - right;
+                    *value = make_number_value(left.number - right.number);
                     return 1;
                 case TOKEN_STAR:
-                    *value = left * right;
+                    *value = make_number_value(left.number * right.number);
                     return 1;
                 case TOKEN_SLASH:
-                    if (right == 0) {
+                    if (right.number == 0) {
                         runtime_error(interpreter, expr->token, "division by zero");
                         return 0;
                     }
-                    *value = left / right;
+                    *value = make_number_value(left.number / right.number);
                     return 1;
                 default:
                     runtime_error(interpreter, expr->token, "unsupported runtime operator");
                     return 0;
             }
-        case EXPR_STRING:
         case EXPR_TRUE:
         case EXPR_FALSE:
-            runtime_error(interpreter, expr->token, "only numeric expressions can run for now");
+            runtime_error(interpreter, expr->token, "only numbers and strings can run for now");
             return 0;
     }
 
     return 0;
 }
 
-static int define_variable(Interpreter *interpreter, Token name, double value, int is_mutable) {
+static int define_variable(Interpreter *interpreter, Token name, Value value, int is_mutable) {
     Variable *existing;
 
     existing = find_variable(interpreter, name);
@@ -1328,13 +1376,13 @@ static int define_variable(Interpreter *interpreter, Token name, double value, i
     return 1;
 }
 
-static void print_number(double value) {
-    long long whole = (long long)value;
+static void print_number(double number) {
+    long long whole = (long long)number;
 
-    if (value == (double)whole) {
+    if (number == (double)whole) {
         printf("%lld\n", whole);
     } else {
-        printf("%g\n", value);
+        printf("%g\n", number);
     }
 }
 
@@ -1346,24 +1394,28 @@ static void print_string_token(Token token) {
     }
 }
 
-static int print_runtime_expression(Interpreter *interpreter, Expr *expr) {
-    double value;
-
-    if (expr != NULL && expr->kind == EXPR_STRING) {
-        print_string_token(expr->token);
-        return 1;
+static void print_value(Value value) {
+    if (value.type == VALUE_STRING) {
+        print_string_token(value.string);
+        return;
     }
+
+    print_number(value.number);
+}
+
+static int print_runtime_expression(Interpreter *interpreter, Expr *expr) {
+    Value value;
 
     if (!eval_expression(interpreter, expr, &value)) {
         return 0;
     }
 
-    print_number(value);
+    print_value(value);
     return 1;
 }
 
 static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
-    double value;
+    Value value;
 
     if (interpreter->had_error) {
         return 0;
@@ -1405,7 +1457,6 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
 
     return 0;
 }
-
 static void run_program(const char *path, const char *source) {
     Parser parser;
     Interpreter interpreter;
