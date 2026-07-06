@@ -1220,6 +1220,28 @@ static Value make_string_value(Token string) {
     value.string = string;
     return value;
 }
+static int string_values_equal(Value left, Value right) {
+    int left_length = left.string.length - 2;
+    int right_length = right.string.length - 2;
+
+    if (left_length < 0) {
+        left_length = 0;
+    }
+    if (right_length < 0) {
+        right_length = 0;
+    }
+
+    return left_length == right_length &&
+           strncmp(left.string.start + 1, right.string.start + 1, (size_t)left_length) == 0;
+}
+
+static int value_is_truthy(Value value) {
+    if (value.type == VALUE_STRING) {
+        return value.string.length > 2;
+    }
+
+    return value.number != 0;
+}
 
 static int token_names_match(Token left, Token right) {
     return left.length == right.length &&
@@ -1320,6 +1342,34 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             if (!eval_expression(interpreter, expr->right, &right)) {
                 return 0;
             }
+
+            switch (expr->token.type) {
+                case TOKEN_EQUAL_EQUAL:
+                    if (left.type != right.type) {
+                        *value = make_number_value(0);
+                        return 1;
+                    }
+                    if (left.type == VALUE_STRING) {
+                        *value = make_number_value(string_values_equal(left, right));
+                        return 1;
+                    }
+                    *value = make_number_value(left.number == right.number);
+                    return 1;
+                case TOKEN_BANG_EQUAL:
+                    if (left.type != right.type) {
+                        *value = make_number_value(1);
+                        return 1;
+                    }
+                    if (left.type == VALUE_STRING) {
+                        *value = make_number_value(!string_values_equal(left, right));
+                        return 1;
+                    }
+                    *value = make_number_value(left.number != right.number);
+                    return 1;
+                default:
+                    break;
+            }
+
             if (left.type != VALUE_NUMBER || right.type != VALUE_NUMBER) {
                 runtime_error(interpreter, expr->token, "numeric operators require numbers");
                 return 0;
@@ -1342,14 +1392,28 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     }
                     *value = make_number_value(left.number / right.number);
                     return 1;
+                case TOKEN_LESS:
+                    *value = make_number_value(left.number < right.number);
+                    return 1;
+                case TOKEN_LESS_EQUAL:
+                    *value = make_number_value(left.number <= right.number);
+                    return 1;
+                case TOKEN_GREATER:
+                    *value = make_number_value(left.number > right.number);
+                    return 1;
+                case TOKEN_GREATER_EQUAL:
+                    *value = make_number_value(left.number >= right.number);
+                    return 1;
                 default:
                     runtime_error(interpreter, expr->token, "unsupported runtime operator");
                     return 0;
             }
         case EXPR_TRUE:
+            *value = make_number_value(1);
+            return 1;
         case EXPR_FALSE:
-            runtime_error(interpreter, expr->token, "only numbers and strings can run for now");
-            return 0;
+            *value = make_number_value(0);
+            return 1;
     }
 
     return 0;
@@ -1450,9 +1514,34 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
         }
         case STMT_PRINT:
             return print_runtime_expression(interpreter, stmt->expression);
-        case STMT_IF:
-            runtime_error(interpreter, stmt->name, "if statements are not supported by --run yet");
-            return 0;
+        case STMT_IF: {
+            int i;
+            int *branch;
+            int branch_count;
+
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
+                return 0;
+            }
+
+            if (value_is_truthy(value)) {
+                branch = stmt->then_statements;
+                branch_count = stmt->then_count;
+            } else if (stmt->has_else) {
+                branch = stmt->else_statements;
+                branch_count = stmt->else_count;
+            } else {
+                return 1;
+            }
+
+            for (i = 0; i < branch_count && !interpreter->had_error; i++) {
+                int stmt_index = branch[i];
+                if (!execute_statement(interpreter, &interpreter->parser->statements[stmt_index])) {
+                    return 0;
+                }
+            }
+
+            return 1;
+        }
     }
 
     return 0;

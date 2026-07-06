@@ -1,7 +1,17 @@
-mut hp = 100
-if hp >= 50
-print "healthy"
+# If test
+
+val crop_value = 20
+
+if crop_value > 10
+    print "good crop"
 else
-print "healthy"
-print "low hp"
+    print "weak crop"
+end
+
+val mana = 3
+
+if mana >= 5
+    print "cast spell"
+else
+    print "not enough mana"
 end
