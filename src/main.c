@@ -10,6 +10,7 @@ Created by drgropp.
 #include <ctype.h>
 
 #define NEWT_VERSION "0.1.0-dev"
+#define NEWT_MAX_WHILE_ITERATIONS 100000
 
 typedef enum {
     TOKEN_EOF,
@@ -534,6 +535,7 @@ typedef enum {
     STMT_MUT_DECL,
     STMT_ASSIGN,
     STMT_IF,
+    STMT_WHILE,
     STMT_PRINT
 } StmtKind;
 
@@ -546,6 +548,8 @@ typedef struct {
     int else_statements[256];
     int else_count;
     int has_else;
+    int body_statements[256];
+    int body_count;
 } Stmt;
 
 struct Expr {
@@ -665,6 +669,7 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->then_count = 0;
     stmt->else_count = 0;
     stmt->has_else = 0;
+    stmt->body_count = 0;
     return stmt;
 }
 
@@ -1067,6 +1072,50 @@ static Stmt *parse_if_statement(Parser *parser) {
     return stmt;
 }
 
+static Stmt *parse_while_statement(Parser *parser) {
+    Token while_token = parser->previous;
+    Expr *condition;
+    Stmt *stmt;
+    int body_statements[256];
+    int body_count;
+    int i;
+
+    condition = parse_expression(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parse_block(parser, TOKEN_END, TOKEN_END, body_statements, &body_count);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume(parser, TOKEN_END, "expected 'end' after while statement");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    stmt = new_stmt(parser, STMT_WHILE, while_token, condition);
+    if (stmt == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < body_count; i++) {
+        stmt->body_statements[i] = body_statements[i];
+    }
+    stmt->body_count = body_count;
+    return stmt;
+}
 static Stmt *parse_statement(Parser *parser) {
     if (parser_match(parser, TOKEN_VAL)) {
         return parse_declaration(parser, STMT_VAL_DECL, "val");
@@ -1078,6 +1127,10 @@ static Stmt *parse_statement(Parser *parser) {
 
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
+    }
+
+    if (parser_match(parser, TOKEN_WHILE)) {
+        return parse_while_statement(parser);
     }
 
     if (parser_match(parser, TOKEN_PRINT)) {
@@ -1130,6 +1183,20 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
                     int stmt_index = stmt->else_statements[i];
                     print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
                 }
+            }
+            break;
+
+        case STMT_WHILE:
+            print_indent(indent);
+            printf("WHILE\n");
+            print_indent(indent + 2);
+            printf("CONDITION\n");
+            print_expression_tree(stmt->expression, indent + 4);
+            print_indent(indent + 2);
+            printf("BODY\n");
+            for (i = 0; i < stmt->body_count; i++) {
+                int stmt_index = stmt->body_statements[i];
+                print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
             }
             break;
         case STMT_PRINT:
@@ -1478,6 +1545,20 @@ static int print_runtime_expression(Interpreter *interpreter, Expr *expr) {
     return 1;
 }
 
+static int execute_statement(Interpreter *interpreter, Stmt *stmt);
+
+static int execute_statement_list(Interpreter *interpreter, int statements[256], int count) {
+    int i;
+
+    for (i = 0; i < count && !interpreter->had_error; i++) {
+        int stmt_index = statements[i];
+        if (!execute_statement(interpreter, &interpreter->parser->statements[stmt_index])) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
 static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
     Value value;
 
@@ -1512,10 +1593,10 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             variable->value = value;
             return 1;
         }
+
         case STMT_PRINT:
             return print_runtime_expression(interpreter, stmt->expression);
         case STMT_IF: {
-            int i;
             int *branch;
             int branch_count;
 
@@ -1533,14 +1614,32 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 return 1;
             }
 
-            for (i = 0; i < branch_count && !interpreter->had_error; i++) {
-                int stmt_index = branch[i];
-                if (!execute_statement(interpreter, &interpreter->parser->statements[stmt_index])) {
+            return execute_statement_list(interpreter, branch, branch_count);
+        }
+        case STMT_WHILE: {
+            int iterations = 0;
+
+            while (!interpreter->had_error) {
+                if (iterations >= NEWT_MAX_WHILE_ITERATIONS) {
+                    runtime_error(interpreter, stmt->name, "while loop exceeded max iteration limit");
+                    return 0;
+                }
+
+                if (!eval_expression(interpreter, stmt->expression, &value)) {
+                    return 0;
+                }
+
+                if (!value_is_truthy(value)) {
+                    return 1;
+                }
+
+                iterations++;
+                if (!execute_statement_list(interpreter, stmt->body_statements, stmt->body_count)) {
                     return 0;
                 }
             }
 
-            return 1;
+            return 0;
         }
     }
 
