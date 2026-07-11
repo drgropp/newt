@@ -1244,12 +1244,14 @@ static void print_parse_tree(const char *path, const char *source) {
 
 typedef enum {
     VALUE_NUMBER,
-    VALUE_STRING
+    VALUE_STRING,
+    VALUE_BOOL
 } ValueType;
 
 typedef struct {
     ValueType type;
     double number;
+    int boolean;
     Token string;
 } Value;
 
@@ -1271,6 +1273,7 @@ static Value make_number_value(double number) {
 
     value.type = VALUE_NUMBER;
     value.number = number;
+    value.boolean = 0;
     value.string.start = NULL;
     value.string.length = 0;
     value.string.line = 0;
@@ -1284,9 +1287,25 @@ static Value make_string_value(Token string) {
 
     value.type = VALUE_STRING;
     value.number = 0;
+    value.boolean = 0;
     value.string = string;
     return value;
 }
+
+static Value make_bool_value(int boolean) {
+    Value value;
+
+    value.type = VALUE_BOOL;
+    value.number = 0;
+    value.boolean = boolean;
+    value.string.start = NULL;
+    value.string.length = 0;
+    value.string.line = 0;
+    value.string.column = 0;
+    value.string.error_message = NULL;
+    return value;
+}
+
 static int string_values_equal(Value left, Value right) {
     int left_length = left.string.length - 2;
     int right_length = right.string.length - 2;
@@ -1303,6 +1322,10 @@ static int string_values_equal(Value left, Value right) {
 }
 
 static int value_is_truthy(Value value) {
+    if (value.type == VALUE_BOOL) {
+        return value.boolean;
+    }
+
     if (value.type == VALUE_STRING) {
         return value.string.length > 2;
     }
@@ -1413,31 +1436,44 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             switch (expr->token.type) {
                 case TOKEN_EQUAL_EQUAL:
                     if (left.type != right.type) {
-                        *value = make_number_value(0);
+                        *value = make_bool_value(0);
                         return 1;
                     }
                     if (left.type == VALUE_STRING) {
-                        *value = make_number_value(string_values_equal(left, right));
+                        *value = make_bool_value(string_values_equal(left, right));
                         return 1;
                     }
-                    *value = make_number_value(left.number == right.number);
+                    if (left.type == VALUE_BOOL) {
+                        *value = make_bool_value(left.boolean == right.boolean);
+                        return 1;
+                    }
+                    *value = make_bool_value(left.number == right.number);
                     return 1;
                 case TOKEN_BANG_EQUAL:
                     if (left.type != right.type) {
-                        *value = make_number_value(1);
+                        *value = make_bool_value(1);
                         return 1;
                     }
                     if (left.type == VALUE_STRING) {
-                        *value = make_number_value(!string_values_equal(left, right));
+                        *value = make_bool_value(!string_values_equal(left, right));
                         return 1;
                     }
-                    *value = make_number_value(left.number != right.number);
+                    if (left.type == VALUE_BOOL) {
+                        *value = make_bool_value(left.boolean != right.boolean);
+                        return 1;
+                    }
+                    *value = make_bool_value(left.number != right.number);
                     return 1;
                 default:
                     break;
             }
 
             if (left.type != VALUE_NUMBER || right.type != VALUE_NUMBER) {
+                if (left.type == VALUE_BOOL || right.type == VALUE_BOOL) {
+                    runtime_error(interpreter, expr->token, "numeric operators require numbers, not booleans");
+                    return 0;
+                }
+
                 runtime_error(interpreter, expr->token, "numeric operators require numbers");
                 return 0;
             }
@@ -1460,26 +1496,26 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     *value = make_number_value(left.number / right.number);
                     return 1;
                 case TOKEN_LESS:
-                    *value = make_number_value(left.number < right.number);
+                    *value = make_bool_value(left.number < right.number);
                     return 1;
                 case TOKEN_LESS_EQUAL:
-                    *value = make_number_value(left.number <= right.number);
+                    *value = make_bool_value(left.number <= right.number);
                     return 1;
                 case TOKEN_GREATER:
-                    *value = make_number_value(left.number > right.number);
+                    *value = make_bool_value(left.number > right.number);
                     return 1;
                 case TOKEN_GREATER_EQUAL:
-                    *value = make_number_value(left.number >= right.number);
+                    *value = make_bool_value(left.number >= right.number);
                     return 1;
                 default:
                     runtime_error(interpreter, expr->token, "unsupported runtime operator");
                     return 0;
             }
         case EXPR_TRUE:
-            *value = make_number_value(1);
+            *value = make_bool_value(1);
             return 1;
         case EXPR_FALSE:
-            *value = make_number_value(0);
+            *value = make_bool_value(0);
             return 1;
     }
 
@@ -1528,6 +1564,11 @@ static void print_string_token(Token token) {
 static void print_value(Value value) {
     if (value.type == VALUE_STRING) {
         print_string_token(value.string);
+        return;
+    }
+
+    if (value.type == VALUE_BOOL) {
+        printf("%s\n", value.boolean ? "true" : "false");
         return;
     }
 

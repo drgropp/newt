@@ -1,0 +1,19 @@
+# Bool test
+
+val awake = true
+val done = false
+
+print awake
+print done
+
+if awake
+    print "newt time"
+else
+    print "sleep time"
+end
+
+if done
+    print "done"
+else
+    print "not done"
+end
