@@ -1,0 +1,17 @@
+# Boolean and
+
+val a = true
+val b = true
+
+if a and b
+    print "both"
+end
+
+val hp = 10
+val food = 5
+
+if hp > 0 and food > 0
+    print "alive"
+end
+
+print true and false

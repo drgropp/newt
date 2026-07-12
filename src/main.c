@@ -8,6 +8,7 @@ Created by drgropp.
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 #define NEWT_VERSION "0.1.0-dev"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
@@ -33,6 +34,7 @@ typedef enum {
     TOKEN_PRINT,
     TOKEN_TRUE,
     TOKEN_FALSE,
+    TOKEN_AND,
 
     TOKEN_PLUS,
     TOKEN_MINUS,
@@ -257,6 +259,9 @@ static TokenType keyword_type(Token token) {
     if (token_text_equals(token, "false")) {
         return TOKEN_FALSE;
     }
+    if (token_text_equals(token, "and")) {
+        return TOKEN_AND;
+    }
 
     return TOKEN_IDENT;
 }
@@ -426,6 +431,8 @@ static const char *token_type_name(TokenType type) {
             return "TRUE";
         case TOKEN_FALSE:
             return "FALSE";
+        case TOKEN_AND:
+            return "AND";
         case TOKEN_PLUS:
             return "PLUS";
         case TOKEN_MINUS:
@@ -525,7 +532,8 @@ typedef enum {
     EXPR_TRUE,
     EXPR_FALSE,
     EXPR_BINARY,
-    EXPR_INPUT_NUMBER
+    EXPR_INPUT_NUMBER,
+    EXPR_SQRT
 } ExprKind;
 
 typedef struct Expr Expr;
@@ -557,6 +565,7 @@ struct Expr {
     Token token;
     Expr *left;
     Expr *right;
+    int argument_count;
 };
 
 typedef struct {
@@ -650,6 +659,7 @@ static Expr *new_expr(Parser *parser, ExprKind kind, Token token) {
     expr->token = token;
     expr->left = NULL;
     expr->right = NULL;
+    expr->argument_count = 0;
     return expr;
 }
 
@@ -701,6 +711,27 @@ static Expr *parse_primary(Parser *parser) {
     }
     if (parser_match(parser, TOKEN_IDENT)) {
         Token name = parser->previous;
+
+        if (token_text_equals(name, "sqrt") && parser_match(parser, TOKEN_LEFT_PAREN)) {
+            Expr *expr = new_expr(parser, EXPR_SQRT, name);
+
+            if (expr == NULL) {
+                return NULL;
+            }
+
+            if (parser->current.type != TOKEN_RIGHT_PAREN) {
+                expr->left = parse_expression(parser);
+                expr->argument_count = 1;
+
+                while (!parser->had_error && parser_match(parser, TOKEN_COMMA)) {
+                    parse_expression(parser);
+                    expr->argument_count++;
+                }
+            }
+
+            parser_consume(parser, TOKEN_RIGHT_PAREN, "expected ')' after sqrt arguments");
+            return expr;
+        }
 
         if (token_text_equals(name, "input_number") && parser_match(parser, TOKEN_LEFT_PAREN)) {
             Expr *expr;
@@ -860,7 +891,30 @@ static Expr *parse_equality(Parser *parser) {
 }
 
 static Expr *parse_expression(Parser *parser) {
-    return parse_equality(parser);
+    Expr *left = parse_equality(parser);
+
+    while (!parser->had_error && parser->current.type == TOKEN_AND) {
+        Token operator_token;
+        Expr *binary;
+        Expr *right;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        right = parse_equality(parser);
+        if (right == NULL) {
+            return NULL;
+        }
+
+        binary = new_expr(parser, EXPR_BINARY, operator_token);
+        if (binary == NULL) {
+            return NULL;
+        }
+        binary->left = left;
+        binary->right = right;
+        left = binary;
+    }
+
+    return left;
 }
 
 static void print_indent(int spaces) {
@@ -901,6 +955,12 @@ static void print_expression_tree(Expr *expr, int indent) {
             break;
         case EXPR_INPUT_NUMBER:
             printf("INPUT_NUMBER %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_SQRT:
+            printf("SQRT arguments=%d\n", expr->argument_count);
+            if (expr->left != NULL) {
+                print_expression_tree(expr->left, indent + 2);
+            }
             break;
     }
 }
@@ -1413,6 +1473,24 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             }
             *value = make_number_value(number);
             return 1;
+        case EXPR_SQRT:
+            if (expr->argument_count != 1) {
+                runtime_error(interpreter, expr->token, "sqrt expects exactly one argument");
+                return 0;
+            }
+            if (!eval_expression(interpreter, expr->left, &left)) {
+                return 0;
+            }
+            if (left.type != VALUE_NUMBER) {
+                runtime_error(interpreter, expr->token, "sqrt argument must be a number");
+                return 0;
+            }
+            if (left.number < 0) {
+                runtime_error(interpreter, expr->token, "sqrt argument cannot be negative");
+                return 0;
+            }
+            *value = make_number_value(sqrt(left.number));
+            return 1;
         case EXPR_IDENT: {
             Variable *variable = find_variable(interpreter, expr->token);
             if (variable == NULL) {
@@ -1428,6 +1506,25 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
         case EXPR_BINARY:
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
+            }
+            if (expr->token.type == TOKEN_AND) {
+                if (left.type != VALUE_BOOL) {
+                    runtime_error(interpreter, expr->token, "and operands must be booleans");
+                    return 0;
+                }
+                if (!left.boolean) {
+                    *value = make_bool_value(0);
+                    return 1;
+                }
+                if (!eval_expression(interpreter, expr->right, &right)) {
+                    return 0;
+                }
+                if (right.type != VALUE_BOOL) {
+                    runtime_error(interpreter, expr->token, "and operands must be booleans");
+                    return 0;
+                }
+                *value = make_bool_value(right.boolean);
+                return 1;
             }
             if (!eval_expression(interpreter, expr->right, &right)) {
                 return 0;

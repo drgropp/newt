@@ -1,0 +1,9 @@
+# Square root built-in
+
+print sqrt(25)
+
+val x = 49
+print sqrt(x)
+
+val area = 81
+print sqrt(area)

@@ -1,206 +1,94 @@
 # Newt
 
-**Newt** is a small experimental scripting language built in C.
+Newt is a small experimental scripting language built in C. It aims to be readable, direct, and easy to understand, with Ruby-style `end` blocks and no indentation rules.
 
-The goal is to create a lightweight, readable language for:
+This repository is an early v1 checkpoint. Newt currently supports:
 
-* tiny tools
-* CLI/TUI apps
-* math scripts
-* game tooling
-* future interop with C, Python, Julia, TypeScript etc.
+- numbers, strings, and booleans
+- immutable `val` and mutable `mut` variables
+- assignment to `mut` variables
+- `print`
+- `input_number("prompt")`
+- arithmetic with `+`, `-`, `*`, and `/`
+- comparisons with `==`, `!=`, `<`, `<=`, `>`, and `>=`
+- boolean `and`
+- `if / else / end`
+- `while / end`
+- the built-in `sqrt(number)` function
+- comments beginning with `#`
 
-Newt is currently very early. Right now it is focused on the language frontend: reading source files, tokenizing them, and parsing simple program structure.
+User-defined functions are not supported yet.
 
-Newt is designed to feel simple, direct, and low-clutter.
-
-It takes inspiration from:
-
-* Python’s readability
-* Ruby-style `end` blocks
-* Go-like simplicity
-* Lua-style embeddability
-* C-friendly implementation
-
-Newt avoids Python-style indentation rules and C-style brace noise. Blocks are closed with `end`.
+## Example
 
 ```newt
+# A tiny status check
 val name = "newt"
 mut hp = 100
+val food = 5
 
-if hp >= 50
+hp = hp - 10
+
+if hp > 0 and food > 0
     print name
 else
-    print "low hp"
+    print "needs help"
+end
+
+print sqrt(49)
+```
+
+`val` variables cannot be reassigned. Use `mut` when a value needs to change:
+
+```newt
+mut count = 1
+
+while count <= 3
+    print count
+    count = count + 1
 end
 ```
 
-## Current Status
-
-Newt currently supports:
-
-* reading `.nt` source files
-* printing source files
-* lexer/token printer
-* line and column tracking
-* lexer error reporting
-* parser skeleton
-* basic parser error reporting
-* simple expression precedence
-* `val` declarations
-* `mut` declarations
-* assignment statements
-* `if / else / end` parsing
-* basic numeric execution with `--run`
-* variable storage and lookup
-* numeric `print` output
-
-Current example:
+Read numeric input with a string prompt:
 
 ```newt
-val x = 2 + 3 * 4
-print x
-
-mut hp = 100
-hp = hp - 10
-print hp
+val side = input_number("Side length: ")
+print sqrt(side * side)
 ```
 
-Run mode:
+## Build and run
 
-```sh
-./newt.exe --run examples/run_test.nt
-```
-
-Output:
-
-```txt
-14
-90
-```
-
-Calculator example:
-
-```newt
-val a = 20
-val b = 5
-
-print a + b
-print a - b
-print a * b
-print a / b
-```
-
-Run it:
-
-```sh
-./newt.exe --run examples/calculator.nt
-```
-
-Expected output:
-
-```txt
-25
-15
-100
-4
-```
-
-Token mode:
-
-```sh
-./newt.exe --tokens examples/calc.nt
-```
-
-Parse mode:
-
-```sh
-./newt.exe --parse examples/calc.nt
-```
-
-
-## Planned Syntax
-
-Newt uses `val` for immutable values and `mut` for mutable variables.
-
-```newt
-val pi = 3.14159
-mut score = 0
-
-score = score + 10
-```
-
-Functions will use `fn` and `end`.
-
-```newt
-fn add(a, b)
-    return a + b
-end
-
-val result = add(2, 3)
-print result
-```
-
-Modules will eventually use `use`.
-
-```newt
-use math
-use fs
-use tui
-use math as m
-```
-
-Possible future Newt code:
-
-```newt
-use math as m
-use tui
-
-tui.title("Newt Calculator")
-
-val a = tui.ask_number("a")
-val b = tui.ask_number("b")
-
-print "sum:", a + b
-print "hypotenuse:", m.sqrt(a * a + b * b)
-```
-
-## Build
-
-Newt is currently built with GCC.
+Build Newt with GCC:
 
 ```sh
 gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c
 ```
 
-Run a file:
+Run a program:
 
 ```sh
-./newt.exe examples/calc.nt
+./newt.exe --run examples/sqrt_test.nt
 ```
 
-Print tokens:
+Other modes:
 
 ```sh
 ./newt.exe --tokens examples/calc.nt
-```
-
-Print parse tree:
-
-```sh
 ./newt.exe --parse examples/calc.nt
 ```
 
-## Project Layout
+## Examples
+
+- `examples/sqrt_test.nt` demonstrates `sqrt` with literals and variables.
+- `examples/and_test.nt` demonstrates `and` with booleans and comparisons.
+- `examples/quadratic_test.nt` uses `sqrt` in the quadratic formula.
+- `examples/bool_test.nt`, `while_test.nt`, and `if_test.nt` cover existing language behavior.
+
+## Project layout
 
 ```txt
 newt/
   examples/
-    calc.nt
-    lexer_test.nt
-    bad_lexer.nt
-    bad_unknown.nt
-    bad_parse.nt
   src/
     main.c
   README.md
@@ -211,66 +99,10 @@ newt/
 
 ## Roadmap
 
-### Phase 0 — Runner
-
-Read `.nt` files and support basic CLI behavior.
-
-Status: mostly complete.
-
-### Phase 1 — Lexer
-
-Turn source text into tokens with useful line/column information and lexer errors.
-
-Status: mostly complete.
-
-### Phase 2 — Parser
-
-Parse tokens into program structure and report syntax errors.
-
-Status: active.
-
-### Phase 3 — AST / Execution
-
-Represent parsed programs and execute simple Newt code.
-
-Current support includes numeric expressions, `val`, `mut`, assignment, variable lookup, and numeric `print`.
-
-Status: started.
-
-### Phase 4 — Variables, Scope, and Blocks
-
-Support better variable rules, block execution, `if`, `else`, `while`, and scope behavior.
-
-Status: planned.
-
-### Phase 5 — Functions
-
-Support function declarations, calls, parameters, and return values.
-
-Status: planned.
-
-### Phase 6 — Standard Library Seeds
-
-Add early built-ins for math, filesystem tools, terminal UI helpers, and future interop experiments.
-
-Status: planned.
-
-### Phase 7 — Interop Experiments
-
-Explore calling into or from C, Python, Julia, TypeScript, and other host languages.
-
-Status: future.
-
-## Philosophy
-
-Newt should be small, readable, and practical.
-
-The language should be easy to write, easy to embed, and easy to understand.
-
-Newt is not ready for real-world use yet. It is currently an experimental language frontend under active development.
+Future work may include user-defined functions, scope improvements, modules, standard-library growth, and interop experiments. These are deliberately outside this small checkpoint.
 
 ## License
 
 No license has been chosen yet.
 
-Copyright © 2026 drgropp. All rights reserved.
+Copyright 2026 drgropp. All rights reserved.

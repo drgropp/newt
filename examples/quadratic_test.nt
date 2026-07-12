@@ -1,0 +1,12 @@
+# Solve x^2 - 5x + 6 = 0 with the quadratic formula.
+
+val a = 1
+val b = 0 - 5
+val c = 6
+val discriminant = b * b - 4 * a * c
+
+val root1 = (0 - b + sqrt(discriminant)) / (2 * a)
+val root2 = (0 - b - sqrt(discriminant)) / (2 * a)
+
+print root1
+print root2
