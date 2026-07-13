@@ -1,9 +1,6 @@
-# Square root built-in
+# sqrt works with number literals and variables.
 
 print sqrt(25)
 
 val x = 49
 print sqrt(x)
-
-val area = 81
-print sqrt(area)

@@ -1,4 +1,4 @@
-# While test
+# Count from 1 through 5 with a mutable variable.
 
 mut count = 1
 

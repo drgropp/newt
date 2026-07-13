@@ -10,7 +10,7 @@ Created by drgropp.
 #include <ctype.h>
 #include <math.h>
 
-#define NEWT_VERSION "0.1.0-dev"
+#define NEWT_VERSION "0.1.0"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
 
 typedef enum {
@@ -1832,7 +1832,7 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "--version") == 0) {
-        printf("Newt %s\n", NEWT_VERSION);
+        printf("newt %s\n", NEWT_VERSION);
         return 0;
     }
 

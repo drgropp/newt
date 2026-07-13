@@ -1,4 +1,4 @@
-# Boolean and
+# and combines boolean expressions.
 
 val a = true
 val b = true
@@ -14,4 +14,6 @@ if hp > 0 and food > 0
     print "alive"
 end
 
-print true and false
+val has_key = true
+val door_locked = false
+print has_key and door_locked

@@ -1,4 +1,4 @@
-# Bool test
+# Boolean values and conditions
 
 val awake = true
 val done = false
