@@ -149,7 +149,7 @@ newt/
 
 ## Status
 
-Newt is experimental, but this checkpoint is a reasonable pause point for the small v1 language. The current focus is clarity and stability rather than adding large features.
+Newt is experimental, and still in an early stage. Newt is currently being worked on and will continue to have updates.
 
 ## License
 
