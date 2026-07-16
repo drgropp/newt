@@ -15,6 +15,18 @@ echo [and_test.nt]
 .\newt.exe --run examples/and_test.nt
 if errorlevel 1 exit /b 1
 
+echo [or_test.nt]
+.\newt.exe --run examples/or_test.nt
+if errorlevel 1 exit /b 1
+
+echo [not_test.nt]
+.\newt.exe --run examples/not_test.nt
+if errorlevel 1 exit /b 1
+
+echo [unary_minus_test.nt]
+.\newt.exe --run examples/unary_minus_test.nt
+if errorlevel 1 exit /b 1
+
 echo [bool_test.nt]
 .\newt.exe --run examples/bool_test.nt
 if errorlevel 1 exit /b 1

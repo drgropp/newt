@@ -35,6 +35,8 @@ typedef enum {
     TOKEN_TRUE,
     TOKEN_FALSE,
     TOKEN_AND,
+    TOKEN_OR,
+    TOKEN_NOT,
 
     TOKEN_PLUS,
     TOKEN_MINUS,
@@ -262,6 +264,12 @@ static TokenType keyword_type(Token token) {
     if (token_text_equals(token, "and")) {
         return TOKEN_AND;
     }
+    if (token_text_equals(token, "or")) {
+        return TOKEN_OR;
+    }
+    if (token_text_equals(token, "not")) {
+        return TOKEN_NOT;
+    }
 
     return TOKEN_IDENT;
 }
@@ -433,6 +441,10 @@ static const char *token_type_name(TokenType type) {
             return "FALSE";
         case TOKEN_AND:
             return "AND";
+        case TOKEN_OR:
+            return "OR";
+        case TOKEN_NOT:
+            return "NOT";
         case TOKEN_PLUS:
             return "PLUS";
         case TOKEN_MINUS:
@@ -531,6 +543,7 @@ typedef enum {
     EXPR_STRING,
     EXPR_TRUE,
     EXPR_FALSE,
+    EXPR_UNARY,
     EXPR_BINARY,
     EXPR_INPUT_NUMBER,
     EXPR_SQRT
@@ -775,8 +788,27 @@ static Expr *parse_primary(Parser *parser) {
     return NULL;
 }
 
+static Expr *parse_unary(Parser *parser) {
+    if (parser->current.type == TOKEN_MINUS || parser->current.type == TOKEN_NOT) {
+        Token operator_token;
+        Expr *unary;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        unary = new_expr(parser, EXPR_UNARY, operator_token);
+        if (unary == NULL) {
+            return NULL;
+        }
+
+        unary->left = parse_unary(parser);
+        return unary;
+    }
+
+    return parse_primary(parser);
+}
+
 static Expr *parse_factor(Parser *parser) {
-    Expr *left = parse_primary(parser);
+    Expr *left = parse_unary(parser);
 
     while (!parser->had_error &&
            (parser->current.type == TOKEN_STAR || parser->current.type == TOKEN_SLASH)) {
@@ -786,7 +818,7 @@ static Expr *parse_factor(Parser *parser) {
 
         parser_advance(parser);
         operator_token = parser->previous;
-        right = parse_primary(parser);
+        right = parse_unary(parser);
         if (right == NULL) {
             return NULL;
         }
@@ -890,7 +922,7 @@ static Expr *parse_equality(Parser *parser) {
     return left;
 }
 
-static Expr *parse_expression(Parser *parser) {
+static Expr *parse_and(Parser *parser) {
     Expr *left = parse_equality(parser);
 
     while (!parser->had_error && parser->current.type == TOKEN_AND) {
@@ -901,6 +933,33 @@ static Expr *parse_expression(Parser *parser) {
         parser_advance(parser);
         operator_token = parser->previous;
         right = parse_equality(parser);
+        if (right == NULL) {
+            return NULL;
+        }
+
+        binary = new_expr(parser, EXPR_BINARY, operator_token);
+        if (binary == NULL) {
+            return NULL;
+        }
+        binary->left = left;
+        binary->right = right;
+        left = binary;
+    }
+
+    return left;
+}
+
+static Expr *parse_expression(Parser *parser) {
+    Expr *left = parse_and(parser);
+
+    while (!parser->had_error && parser->current.type == TOKEN_OR) {
+        Token operator_token;
+        Expr *binary;
+        Expr *right;
+
+        parser_advance(parser);
+        operator_token = parser->previous;
+        right = parse_and(parser);
         if (right == NULL) {
             return NULL;
         }
@@ -947,6 +1006,10 @@ static void print_expression_tree(Expr *expr, int indent) {
             break;
         case EXPR_FALSE:
             printf("FALSE %.*s\n", expr->token.length, expr->token.start);
+            break;
+        case EXPR_UNARY:
+            printf("UNARY %.*s\n", expr->token.length, expr->token.start);
+            print_expression_tree(expr->left, indent + 2);
             break;
         case EXPR_BINARY:
             printf("BINARY %.*s\n", expr->token.length, expr->token.start);
@@ -1503,6 +1566,24 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
         case EXPR_STRING:
             *value = make_string_value(expr->token);
             return 1;
+        case EXPR_UNARY:
+            if (!eval_expression(interpreter, expr->left, &left)) {
+                return 0;
+            }
+            if (expr->token.type == TOKEN_NOT) {
+                if (left.type != VALUE_BOOL) {
+                    runtime_error(interpreter, expr->token, "not operand must be a boolean");
+                    return 0;
+                }
+                *value = make_bool_value(!left.boolean);
+                return 1;
+            }
+            if (left.type != VALUE_NUMBER) {
+                runtime_error(interpreter, expr->token, "unary minus operand must be a number");
+                return 0;
+            }
+            *value = make_number_value(-left.number);
+            return 1;
         case EXPR_BINARY:
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
@@ -1521,6 +1602,25 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                 }
                 if (right.type != VALUE_BOOL) {
                     runtime_error(interpreter, expr->token, "and operands must be booleans");
+                    return 0;
+                }
+                *value = make_bool_value(right.boolean);
+                return 1;
+            }
+            if (expr->token.type == TOKEN_OR) {
+                if (left.type != VALUE_BOOL) {
+                    runtime_error(interpreter, expr->token, "or operands must be booleans");
+                    return 0;
+                }
+                if (left.boolean) {
+                    *value = make_bool_value(1);
+                    return 1;
+                }
+                if (!eval_expression(interpreter, expr->right, &right)) {
+                    return 0;
+                }
+                if (right.type != VALUE_BOOL) {
+                    runtime_error(interpreter, expr->token, "or operands must be booleans");
                     return 0;
                 }
                 *value = make_bool_value(right.boolean);

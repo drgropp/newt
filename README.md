@@ -48,6 +48,9 @@ Run one example directly:
 ```sh
 ./newt.exe --run examples/sqrt_test.nt
 ./newt.exe --run examples/and_test.nt
+./newt.exe --run examples/or_test.nt
+./newt.exe --run examples/not_test.nt
+./newt.exe --run examples/unary_minus_test.nt
 ./newt.exe --run examples/bool_test.nt
 ./newt.exe --run examples/while_test.nt
 ./newt.exe --run examples/if_test.nt
@@ -72,6 +75,9 @@ Newt currently supports:
 - arithmetic with `+`, `-`, `*`, and `/`
 - comparisons with `==`, `!=`, `<`, `<=`, `>`, and `>=`
 - boolean `and`
+- boolean `or`
+- boolean `not`
+- unary minus and negative numbers
 - `if / else / end` conditions
 - `while / end` loops
 - the built-in `sqrt(number)` function
@@ -91,7 +97,7 @@ score = score + 5
 print score
 ```
 
-Strings, booleans, comparisons, and `and`:
+Strings, booleans, and comparisons:
 
 ```newt
 val player = "Ada"
@@ -103,6 +109,20 @@ if hp > 0 and food > 0
 else
     print "needs help"
 end
+```
+
+Boolean `or`, boolean `not`, and negative numbers:
+
+```newt
+val tired = false
+val hungry = true
+
+if hungry or not tired
+    print "needs care"
+end
+
+val change = -(2 + 3)
+print change
 ```
 
 Loops:
@@ -127,6 +147,9 @@ print sqrt(area)
 
 - `sqrt_test.nt` demonstrates `sqrt` with a literal and a variable.
 - `and_test.nt` combines boolean values and numeric comparisons.
+- `or_test.nt` demonstrates `or` with boolean values and comparisons.
+- `not_test.nt` demonstrates negating boolean values with `not`.
+- `unary_minus_test.nt` demonstrates negative numbers and negated expressions.
 - `bool_test.nt` demonstrates boolean values and conditional branches.
 - `while_test.nt` demonstrates a loop and mutable assignment.
 - `if_test.nt` demonstrates comparisons with `if` and `else`.

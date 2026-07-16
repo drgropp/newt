@@ -1,0 +1,13 @@
+val sleeping = false
+
+if not sleeping
+    print "awake"
+end
+
+val ready = true
+
+if not ready
+    print "not ready"
+else
+    print "ready"
+end
