@@ -39,6 +39,10 @@ echo [if_test.nt]
 .\newt.exe --run examples/if_test.nt
 if errorlevel 1 exit /b 1
 
+echo [else_if_test.nt]
+.\newt.exe --run examples/else_if_test.nt
+if errorlevel 1 exit /b 1
+
 echo [calculator.nt]
 .\newt.exe --run examples/calculator.nt
 if errorlevel 1 exit /b 1

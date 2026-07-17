@@ -1,0 +1,36 @@
+# Else-if test
+
+# Middle branch
+val crop = 2
+
+if crop == 1
+    print "carrot"
+else if crop == 2
+    print "strawberry"
+else if crop == 3
+    print "glowcap"
+else
+    print "unknown crop"
+end
+
+# First branch
+val first_crop = 1
+
+if first_crop == 1
+    print "carrot"
+else if first_crop == 2
+    print "strawberry"
+else
+    print "unknown crop"
+end
+
+# Else fallback
+val mystery_crop = 9
+
+if mystery_crop == 1
+    print "carrot"
+else if mystery_crop == 2
+    print "strawberry"
+else
+    print "unknown crop"
+end

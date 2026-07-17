@@ -24,13 +24,15 @@ print age
 
 ## Conditions
 
-Use `if`, optional `else`, and `end` to choose which statements run.
+Use `if`, optional `else if` and `else` branches, and `end` to choose which statements run. Newt runs only the first matching branch.
 
 ```newt
 if age >= 18
     print "adult"
+else if age >= 13
+    print "teen"
 else
-    print "minor"
+    print "child"
 end
 ```
 

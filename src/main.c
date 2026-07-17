@@ -1128,8 +1128,7 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
     }
 }
 
-static Stmt *parse_if_statement(Parser *parser) {
-    Token if_token = parser->previous;
+static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
     Expr *condition;
     Stmt *stmt;
     int then_statements[256];
@@ -1138,6 +1137,17 @@ static Stmt *parse_if_statement(Parser *parser) {
     int else_count = 0;
     int has_else = 0;
     int i;
+
+    if (parser->current.type == TOKEN_NEWLINE ||
+        parser->current.type == TOKEN_EOF ||
+        parser->current.type == TOKEN_ELSE ||
+        parser->current.type == TOKEN_END) {
+        parser_error(parser,
+                     parser->current,
+                     consumes_end ? "expected condition after 'if'"
+                                  : "expected condition after 'else if'");
+        return NULL;
+    }
 
     condition = parse_expression(parser);
     if (parser->had_error) {
@@ -1156,25 +1166,38 @@ static Stmt *parse_if_statement(Parser *parser) {
 
     if (parser_match(parser, TOKEN_ELSE)) {
         has_else = 1;
+        if (parser_match(parser, TOKEN_IF)) {
+            Stmt *else_if_stmt = parse_if_branch(parser, parser->previous, 0);
+
+            if (else_if_stmt == NULL) {
+                return NULL;
+            }
+
+            else_statements[0] = statement_index(parser, else_if_stmt);
+            else_count = 1;
+        } else {
+            parser_consume_statement_end(parser);
+            if (parser->had_error) {
+                return NULL;
+            }
+
+            parse_block(parser, TOKEN_END, TOKEN_END, else_statements, &else_count);
+            if (parser->had_error) {
+                return NULL;
+            }
+        }
+    }
+
+    if (consumes_end) {
+        parser_consume(parser, TOKEN_END, "expected 'end' after if statement");
+        if (parser->had_error) {
+            return NULL;
+        }
+
         parser_consume_statement_end(parser);
         if (parser->had_error) {
             return NULL;
         }
-
-        parse_block(parser, TOKEN_END, TOKEN_END, else_statements, &else_count);
-        if (parser->had_error) {
-            return NULL;
-        }
-    }
-
-    parser_consume(parser, TOKEN_END, "expected 'end' after if statement");
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    parser_consume_statement_end(parser);
-    if (parser->had_error) {
-        return NULL;
     }
 
     stmt = new_stmt(parser, STMT_IF, if_token, condition);
@@ -1192,6 +1215,10 @@ static Stmt *parse_if_statement(Parser *parser) {
     stmt->else_count = else_count;
     stmt->has_else = has_else;
     return stmt;
+}
+
+static Stmt *parse_if_statement(Parser *parser) {
+    return parse_if_branch(parser, parser->previous, 1);
 }
 
 static Stmt *parse_while_statement(Parser *parser) {

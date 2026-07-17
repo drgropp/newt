@@ -56,6 +56,7 @@ Run one example directly:
 ./newt.exe --run examples/bool_test.nt
 ./newt.exe --run examples/while_test.nt
 ./newt.exe --run examples/if_test.nt
+./newt.exe --run examples/else_if_test.nt
 ./newt.exe --run examples/calculator.nt
 ```
 
@@ -82,7 +83,7 @@ Newt currently supports:
 - boolean `or`
 - boolean `not`
 - unary minus and negative numbers
-- `if / else / end` conditions
+- `if / else if / else / end` conditions
 - `while / end` loops
 - the built-in `sqrt(number)` function
 - line comments beginning with `#`
@@ -131,6 +132,20 @@ val change = -(2 + 3)
 print change
 ```
 
+Multiple conditional branches with `else if`:
+
+```newt
+val crop = 2
+
+if crop == 1
+    print "carrot"
+else if crop == 2
+    print "strawberry"
+else
+    print "unknown crop"
+end
+```
+
 Loops:
 
 ```newt
@@ -159,6 +174,7 @@ print sqrt(area)
 - `bool_test.nt` demonstrates boolean values and conditional branches.
 - `while_test.nt` demonstrates a loop and mutable assignment.
 - `if_test.nt` demonstrates comparisons with `if` and `else`.
+- `else_if_test.nt` demonstrates ordered `else if` branches and an `else` fallback.
 - `calculator.nt` demonstrates the four arithmetic operators.
 - `quadratic_test.nt` uses arithmetic and `sqrt` to solve a quadratic equation.
 
