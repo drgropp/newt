@@ -34,6 +34,8 @@ Use `--run` to execute a `.nt` source file:
 ./newt.exe --run examples/calculator.nt
 ```
 
+Runtime errors include the source file, line, and column. A failed run exits with a nonzero status.
+
 Newt also has development modes for inspecting tokens and parse trees:
 
 ```sh
@@ -63,6 +65,8 @@ On Windows, rebuild and run the main examples together with:
 test_newt.bat
 ```
 
+The script stops immediately if the build or any example fails.
+
 ## Supported language features
 
 Newt currently supports:
@@ -84,6 +88,8 @@ Newt currently supports:
 - line comments beginning with `#`
 
 ## Language examples
+
+See [docs/language.md](docs/language.md) for a short language guide.
 
 Values and arithmetic:
 
@@ -160,6 +166,8 @@ print sqrt(area)
 
 ```txt
 newt/
+  docs/
+    language.md
   examples/
   src/
     main.c

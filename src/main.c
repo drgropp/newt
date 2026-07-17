@@ -80,15 +80,14 @@ static void print_help(void) {
     printf("Newt %s\n", NEWT_VERSION);
     printf("\n");
     printf("Usage:\n");
-    printf("  newt <file.nt>\n");
-    printf("  newt --tokens <file.nt>\n");
-    printf("  newt --parse <file.nt>\n");
-    printf("  newt --run <file.nt>\n");
-    printf("  newt --help\n");
-    printf("  newt --version\n");
-    printf("  newt --about\n");
+    printf("  newt.exe --run <file.nt>     Run a Newt program\n");
+    printf("  newt.exe --tokens <file.nt>  Print lexer tokens\n");
+    printf("  newt.exe --parse <file.nt>   Print the parse tree\n");
+    printf("  newt.exe --version           Print the Newt version\n");
+    printf("  newt.exe --help              Show this help\n");
     printf("\n");
-    printf("Phase 2: reads .nt source files, can print tokens, and can debug-print a parse tree.\n");
+    printf("Example:\n");
+    printf("  newt.exe --run examples/hello.nt\n");
 }
 
 static char *read_file(const char *path) {
@@ -1461,6 +1460,19 @@ static int token_names_match(Token left, Token right) {
            strncmp(left.start, right.start, (size_t)left.length) == 0;
 }
 
+static const char *value_type_name(ValueType type) {
+    switch (type) {
+        case VALUE_NUMBER:
+            return "number";
+        case VALUE_STRING:
+            return "string";
+        case VALUE_BOOL:
+            return "boolean";
+    }
+
+    return "unknown value";
+}
+
 static void runtime_error(Interpreter *interpreter, Token token, const char *message) {
     if (interpreter->had_error) {
         return;
@@ -1472,6 +1484,34 @@ static void runtime_error(Interpreter *interpreter, Token token, const char *mes
            token.column,
            message);
     interpreter->had_error = 1;
+}
+
+static void runtime_type_error(Interpreter *interpreter,
+                               Token token,
+                               const char *subject,
+                               const char *expected,
+                               Value actual) {
+    char message[160];
+
+    snprintf(message,
+             sizeof(message),
+             "%s must be %s, got %s",
+             subject,
+             expected,
+             value_type_name(actual.type));
+    runtime_error(interpreter, token, message);
+}
+
+static void runtime_name_error(Interpreter *interpreter, Token token, const char *message) {
+    char detailed_message[160];
+
+    snprintf(detailed_message,
+             sizeof(detailed_message),
+             "%s '%.*s'",
+             message,
+             token.length,
+             token.start);
+    runtime_error(interpreter, token, detailed_message);
 }
 
 static Variable *find_variable(Interpreter *interpreter, Token name) {
@@ -1545,7 +1585,11 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                 return 0;
             }
             if (left.type != VALUE_NUMBER) {
-                runtime_error(interpreter, expr->token, "sqrt argument must be a number");
+                runtime_type_error(interpreter,
+                                   expr->token,
+                                   "sqrt argument",
+                                   "a number",
+                                   left);
                 return 0;
             }
             if (left.number < 0) {
@@ -1557,7 +1601,7 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
         case EXPR_IDENT: {
             Variable *variable = find_variable(interpreter, expr->token);
             if (variable == NULL) {
-                runtime_error(interpreter, expr->token, "unknown variable");
+                runtime_name_error(interpreter, expr->token, "undefined variable");
                 return 0;
             }
             *value = variable->value;
@@ -1572,14 +1616,22 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             }
             if (expr->token.type == TOKEN_NOT) {
                 if (left.type != VALUE_BOOL) {
-                    runtime_error(interpreter, expr->token, "not operand must be a boolean");
+                    runtime_type_error(interpreter,
+                                       expr->token,
+                                       "not operand",
+                                       "a boolean",
+                                       left);
                     return 0;
                 }
                 *value = make_bool_value(!left.boolean);
                 return 1;
             }
             if (left.type != VALUE_NUMBER) {
-                runtime_error(interpreter, expr->token, "unary minus operand must be a number");
+                runtime_type_error(interpreter,
+                                   expr->token,
+                                   "unary minus operand",
+                                   "a number",
+                                   left);
                 return 0;
             }
             *value = make_number_value(-left.number);
@@ -1590,7 +1642,11 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             }
             if (expr->token.type == TOKEN_AND) {
                 if (left.type != VALUE_BOOL) {
-                    runtime_error(interpreter, expr->token, "and operands must be booleans");
+                    runtime_type_error(interpreter,
+                                       expr->token,
+                                       "left operand of 'and'",
+                                       "a boolean",
+                                       left);
                     return 0;
                 }
                 if (!left.boolean) {
@@ -1601,7 +1657,11 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     return 0;
                 }
                 if (right.type != VALUE_BOOL) {
-                    runtime_error(interpreter, expr->token, "and operands must be booleans");
+                    runtime_type_error(interpreter,
+                                       expr->token,
+                                       "right operand of 'and'",
+                                       "a boolean",
+                                       right);
                     return 0;
                 }
                 *value = make_bool_value(right.boolean);
@@ -1609,7 +1669,11 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             }
             if (expr->token.type == TOKEN_OR) {
                 if (left.type != VALUE_BOOL) {
-                    runtime_error(interpreter, expr->token, "or operands must be booleans");
+                    runtime_type_error(interpreter,
+                                       expr->token,
+                                       "left operand of 'or'",
+                                       "a boolean",
+                                       left);
                     return 0;
                 }
                 if (left.boolean) {
@@ -1620,7 +1684,11 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     return 0;
                 }
                 if (right.type != VALUE_BOOL) {
-                    runtime_error(interpreter, expr->token, "or operands must be booleans");
+                    runtime_type_error(interpreter,
+                                       expr->token,
+                                       "right operand of 'or'",
+                                       "a boolean",
+                                       right);
                     return 0;
                 }
                 *value = make_bool_value(right.boolean);
@@ -1724,7 +1792,7 @@ static int define_variable(Interpreter *interpreter, Token name, Value value, in
 
     existing = find_variable(interpreter, name);
     if (existing != NULL) {
-        runtime_error(interpreter, name, "variable already defined");
+        runtime_name_error(interpreter, name, "variable already defined");
         return 0;
     }
 
@@ -1818,11 +1886,11 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
         case STMT_ASSIGN: {
             Variable *variable = find_variable(interpreter, stmt->name);
             if (variable == NULL) {
-                runtime_error(interpreter, stmt->name, "unknown variable");
+                runtime_name_error(interpreter, stmt->name, "undefined variable");
                 return 0;
             }
             if (!variable->is_mutable) {
-                runtime_error(interpreter, stmt->name, "cannot assign to val");
+                runtime_name_error(interpreter, stmt->name, "cannot assign to immutable val");
                 return 0;
             }
             if (!eval_expression(interpreter, stmt->expression, &value)) {
@@ -1883,14 +1951,14 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
 
     return 0;
 }
-static void run_program(const char *path, const char *source) {
+static int run_program(const char *path, const char *source) {
     Parser parser;
     Interpreter interpreter;
     int i;
 
     parser_init(&parser, path, source);
     if (!parse_program(&parser)) {
-        return;
+        return 0;
     }
 
     interpreter.parser = &parser;
@@ -1901,6 +1969,8 @@ static void run_program(const char *path, const char *source) {
         int stmt_index = parser.top_level_statements[i];
         execute_statement(&interpreter, &parser.statements[stmt_index]);
     }
+
+    return !interpreter.had_error;
 }
 
 static void print_source(const char *source) {
@@ -1918,6 +1988,7 @@ int main(int argc, char **argv) {
     int print_token_mode = 0;
     int parse_mode = 0;
     int run_mode = 0;
+    int success = 1;
     const char *path = NULL;
 
     if (argc < 2) {
@@ -1983,12 +2054,12 @@ int main(int argc, char **argv) {
     } else if (parse_mode) {
         print_parse_tree(path, source);
     } else if (run_mode) {
-        run_program(path, source);
+        success = run_program(path, source);
     } else {
         print_source(source);
     }
 
     free(source);
 
-    return 0;
+    return success ? 0 : 1;
 }
