@@ -12,6 +12,7 @@ Created by drgropp.
 
 #define NEWT_VERSION "0.1.0"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
+#define NEWT_MAX_CALL_DEPTH 256
 
 typedef enum {
     TOKEN_EOF,
@@ -553,6 +554,8 @@ typedef struct Expr Expr;
 typedef enum {
     STMT_VAL_DECL,
     STMT_MUT_DECL,
+    STMT_FN_DECL,
+    STMT_CALL,
     STMT_ASSIGN,
     STMT_IF,
     STMT_WHILE,
@@ -764,6 +767,13 @@ static Expr *parse_primary(Parser *parser) {
             }
 
             return expr;
+        }
+
+        if (parser->current.type == TOKEN_LEFT_PAREN) {
+            parser_error(parser,
+                         parser->current,
+                         "function calls cannot be used in expressions yet");
+            return NULL;
         }
 
         return new_expr(parser, EXPR_IDENT, name);
@@ -1107,6 +1117,28 @@ static Stmt *parse_assignment_statement(Parser *parser) {
     return new_stmt(parser, STMT_ASSIGN, name, expr);
 }
 
+static Stmt *parse_function_call(Parser *parser, Token name) {
+    parser_consume(parser, TOKEN_LEFT_PAREN, "expected '(' after function name");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    if (parser->current.type != TOKEN_RIGHT_PAREN) {
+        parser_error(parser,
+                     parser->current,
+                     "function calls do not take arguments yet");
+        return NULL;
+    }
+
+    parser_advance(parser);
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    return new_stmt(parser, STMT_CALL, name, NULL);
+}
+
 static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int statements[256], int *count) {
     *count = 0;
     parser_skip_newlines(parser);
@@ -1126,6 +1158,64 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
         }
         parser_skip_newlines(parser);
     }
+}
+
+static Stmt *parse_function_declaration(Parser *parser) {
+    Token name;
+    Stmt *stmt;
+    int body_statements[256];
+    int body_count;
+    int i;
+
+    parser_consume(parser, TOKEN_IDENT, "expected function name after 'fn'");
+    if (parser->had_error) {
+        return NULL;
+    }
+    name = parser->previous;
+
+    parser_consume(parser, TOKEN_LEFT_PAREN, "expected '(' after function name");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    if (parser->current.type != TOKEN_RIGHT_PAREN) {
+        parser_error(parser,
+                     parser->current,
+                     "function declarations do not take parameters yet");
+        return NULL;
+    }
+    parser_advance(parser);
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parse_block(parser, TOKEN_END, TOKEN_END, body_statements, &body_count);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume(parser, TOKEN_END, "expected 'end' after function declaration");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    stmt = new_stmt(parser, STMT_FN_DECL, name, NULL);
+    if (stmt == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < body_count; i++) {
+        stmt->body_statements[i] = body_statements[i];
+    }
+    stmt->body_count = body_count;
+    return stmt;
 }
 
 static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
@@ -1274,6 +1364,10 @@ static Stmt *parse_statement(Parser *parser) {
         return parse_declaration(parser, STMT_MUT_DECL, "mut");
     }
 
+    if (parser_match(parser, TOKEN_FN)) {
+        return parse_function_declaration(parser);
+    }
+
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
     }
@@ -1287,6 +1381,12 @@ static Stmt *parse_statement(Parser *parser) {
     }
 
     if (parser_match(parser, TOKEN_IDENT)) {
+        Token name = parser->previous;
+
+        if (parser->current.type == TOKEN_LEFT_PAREN) {
+            return parse_function_call(parser, name);
+        }
+
         return parse_assignment_statement(parser);
     }
 
@@ -1307,6 +1407,20 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             print_indent(indent);
             printf("MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
             print_expression_tree(stmt->expression, indent + 2);
+            break;
+        case STMT_FN_DECL:
+            print_indent(indent);
+            printf("FN_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_indent(indent + 2);
+            printf("BODY\n");
+            for (i = 0; i < stmt->body_count; i++) {
+                int stmt_index = stmt->body_statements[i];
+                print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
+            }
+            break;
+        case STMT_CALL:
+            print_indent(indent);
+            printf("CALL name=%.*s\n", stmt->name.length, stmt->name.start);
             break;
         case STMT_ASSIGN:
             print_indent(indent);
@@ -1411,9 +1525,17 @@ typedef struct {
 } Variable;
 
 typedef struct {
+    Token name;
+    Stmt *declaration;
+} Function;
+
+typedef struct {
     Parser *parser;
     Variable variables[256];
     int variable_count;
+    Function functions[256];
+    int function_count;
+    int call_depth;
     int had_error;
 } Interpreter;
 
@@ -1551,6 +1673,35 @@ static Variable *find_variable(Interpreter *interpreter, Token name) {
     }
 
     return NULL;
+}
+
+static Function *find_function(Interpreter *interpreter, Token name) {
+    int i;
+
+    for (i = 0; i < interpreter->function_count; i++) {
+        if (token_names_match(interpreter->functions[i].name, name)) {
+            return &interpreter->functions[i];
+        }
+    }
+
+    return NULL;
+}
+
+static int define_function(Interpreter *interpreter, Stmt *declaration) {
+    if (find_function(interpreter, declaration->name) != NULL) {
+        runtime_name_error(interpreter, declaration->name, "function already defined");
+        return 0;
+    }
+
+    if (interpreter->function_count >= 256) {
+        runtime_error(interpreter, declaration->name, "too many functions");
+        return 0;
+    }
+
+    interpreter->functions[interpreter->function_count].name = declaration->name;
+    interpreter->functions[interpreter->function_count].declaration = declaration;
+    interpreter->function_count++;
+    return 1;
 }
 
 static int read_number_token(Interpreter *interpreter, Token token, double *number) {
@@ -1900,6 +2051,30 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
     }
 
     switch (stmt->kind) {
+        case STMT_FN_DECL:
+            return define_function(interpreter, stmt);
+        case STMT_CALL: {
+            Function *function = find_function(interpreter, stmt->name);
+            int succeeded;
+
+            if (function == NULL) {
+                runtime_name_error(interpreter, stmt->name, "undefined function");
+                return 0;
+            }
+            if (interpreter->call_depth >= NEWT_MAX_CALL_DEPTH) {
+                runtime_name_error(interpreter,
+                                   stmt->name,
+                                   "maximum call depth exceeded in function");
+                return 0;
+            }
+
+            interpreter->call_depth++;
+            succeeded = execute_statement_list(interpreter,
+                                               function->declaration->body_statements,
+                                               function->declaration->body_count);
+            interpreter->call_depth--;
+            return succeeded;
+        }
         case STMT_VAL_DECL:
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
@@ -1990,6 +2165,8 @@ static int run_program(const char *path, const char *source) {
 
     interpreter.parser = &parser;
     interpreter.variable_count = 0;
+    interpreter.function_count = 0;
+    interpreter.call_depth = 0;
     interpreter.had_error = 0;
 
     for (i = 0; i < parser.top_level_statement_count && !interpreter.had_error; i++) {

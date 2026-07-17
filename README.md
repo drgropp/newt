@@ -2,7 +2,7 @@
 
 Newt is a small experimental scripting language implemented in C. It is designed to be readable, direct, and easy to learn, with simple statements and `end`-delimited blocks.
 
-This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as user-defined functions, arrays, imports, modules, file I/O, and networking are intentionally left for later.
+This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as arrays, imports, modules, file I/O, and networking are intentionally left for later.
 
 ## Build
 
@@ -57,6 +57,7 @@ Run one example directly:
 ./newt.exe --run examples/while_test.nt
 ./newt.exe --run examples/if_test.nt
 ./newt.exe --run examples/else_if_test.nt
+./newt.exe --run examples/function_test.nt
 ./newt.exe --run examples/calculator.nt
 ```
 
@@ -85,6 +86,7 @@ Newt currently supports:
 - unary minus and negative numbers
 - `if / else if / else / end` conditions
 - `while / end` loops
+- basic user-defined functions with no parameters or return values yet
 - the built-in `sqrt(number)` function
 - line comments beginning with `#`
 
@@ -164,6 +166,18 @@ val area = input_number("Area: ")
 print sqrt(area)
 ```
 
+Basic functions:
+
+```newt
+fn greet()
+    print "hello from function"
+end
+
+greet()
+```
+
+Functions currently take no parameters and do not return values. Function calls are standalone statements.
+
 ## Main examples
 
 - `sqrt_test.nt` demonstrates `sqrt` with a literal and a variable.
@@ -175,6 +189,7 @@ print sqrt(area)
 - `while_test.nt` demonstrates a loop and mutable assignment.
 - `if_test.nt` demonstrates comparisons with `if` and `else`.
 - `else_if_test.nt` demonstrates ordered `else if` branches and an `else` fallback.
+- `function_test.nt` demonstrates declaring and calling basic functions.
 - `calculator.nt` demonstrates the four arithmetic operators.
 - `quadratic_test.nt` uses arithmetic and `sqrt` to solve a quadratic equation.
 

@@ -1,0 +1,13 @@
+# Function test
+
+fn greet()
+    print "hello from function"
+end
+
+fn farm()
+    print "plant carrot"
+    print "water crop"
+end
+
+greet()
+farm()

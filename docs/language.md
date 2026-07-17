@@ -78,6 +78,20 @@ Use `sqrt` for the square root of a non-negative number.
 print sqrt(25)
 ```
 
+## Functions
+
+Declare a function with `fn`, a name, empty parentheses, and `end`. Call it by writing its name followed by empty parentheses.
+
+```newt
+fn greet()
+    print "hello"
+end
+
+greet()
+```
+
+Functions currently have no parameters and no return values, so calls are standalone statements.
+
 ## Comments
 
 A comment begins with `#` and continues to the end of the line.
