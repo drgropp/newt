@@ -90,7 +90,7 @@ end
 print add(2, 3)
 ```
 
-Functions may still have no parameters. Calls whose return values are not needed can remain standalone statements. A function currently supports up to 16 parameters.
+Functions may still have no parameters. Calls whose return values are not needed can remain standalone statements. A function currently supports up to 16 parameters. Newt does not have a `none` value yet, so a function without an explicit `return` produces the number `0` when its call is used as a value.
 
 ## Comments
 

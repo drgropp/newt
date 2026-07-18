@@ -1,9 +1,12 @@
 # Return test
 
-fn answer()
-    return 42
-    print "not reached"
+fn get_name()
+    return "Newt"
 end
 
-val result = answer()
-print result
+fn is_ready()
+    return true
+end
+
+print get_name()
+print is_ready()

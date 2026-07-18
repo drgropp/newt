@@ -1874,7 +1874,6 @@ static int define_function(Interpreter *interpreter, Stmt *declaration) {
 
 static int call_function(Interpreter *interpreter,
                          Expr *call,
-                         int requires_value,
                          Value *value);
 
 static int read_number_token(Interpreter *interpreter, Token token, double *number) {
@@ -1962,7 +1961,7 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             *value = make_string_value(expr->token);
             return 1;
         case EXPR_CALL:
-            return call_function(interpreter, expr, 1, value);
+            return call_function(interpreter, expr, value);
         case EXPR_UNARY:
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
@@ -2230,7 +2229,6 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
 
 static int call_function(Interpreter *interpreter,
                          Expr *call,
-                         int requires_value,
                          Value *value) {
     Function *function = find_function(interpreter, call->token);
     Value argument_values[NEWT_MAX_FUNCTION_PARAMETERS];
@@ -2300,18 +2298,7 @@ static int call_function(Interpreter *interpreter,
     if (!succeeded) {
         return 0;
     }
-    if (requires_value && !did_return) {
-        char message[160];
-
-        snprintf(message,
-                 sizeof(message),
-                 "function '%.*s' did not return a value",
-                 call->token.length,
-                 call->token.start);
-        runtime_error(interpreter, call->token, message);
-        return 0;
-    }
-    if (value != NULL && did_return) {
+    if (value != NULL) {
         *value = returned_value;
     }
 
@@ -2329,7 +2316,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
         case STMT_FN_DECL:
             return define_function(interpreter, stmt);
         case STMT_CALL:
-            return call_function(interpreter, stmt->expression, 0, NULL);
+            return call_function(interpreter, stmt->expression, NULL);
         case STMT_RETURN:
             if (interpreter->call_depth == 0) {
                 runtime_error(interpreter,

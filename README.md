@@ -179,7 +179,9 @@ val result = add(2, 3)
 print result
 ```
 
-Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters.
+Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters. Because Newt does not have a `none` value yet, a value-producing call to a function without an explicit `return` safely produces the number `0`.
+
+Arrays, imports/modules, and file I/O are not part of Newt yet.
 
 ## Main examples
 
@@ -194,7 +196,8 @@ Functions can also have no parameters, and a call may be used as a standalone st
 - `else_if_test.nt` demonstrates ordered `else if` branches and an `else` fallback.
 - `function_test.nt` demonstrates declaring and calling basic functions.
 - `function_params_test.nt` demonstrates parameters, arguments, and returned values.
-- `return_test.nt` demonstrates that `return` exits a function immediately.
+- `return_test.nt` demonstrates string and boolean return values.
+- `wrong_argument_count_test.nt` demonstrates the runtime error for an incorrect argument count.
 - `calculator.nt` demonstrates the four arithmetic operators.
 - `quadratic_test.nt` uses arithmetic and `sqrt` to solve a quadratic equation.
 
