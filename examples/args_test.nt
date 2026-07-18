@@ -1,0 +1,5 @@
+# Args test
+
+print arg_count()
+print arg(0)
+print arg(1)

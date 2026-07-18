@@ -9,11 +9,13 @@ Created by drgropp.
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <limits.h>
 
 #define NEWT_VERSION "0.1.0"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
 #define NEWT_MAX_CALL_DEPTH 256
 #define NEWT_MAX_FUNCTION_PARAMETERS 16
+#define NEWT_MAX_RUNTIME_STRINGS 1024
 
 typedef enum {
     TOKEN_EOF,
@@ -82,7 +84,7 @@ static void print_help(void) {
     printf("Newt %s\n", NEWT_VERSION);
     printf("\n");
     printf("Usage:\n");
-    printf("  newt.exe --run <file.nt>     Run a Newt program\n");
+    printf("  newt.exe --run <file.nt> [args...]  Run a Newt program\n");
     printf("  newt.exe --tokens <file.nt>  Print lexer tokens\n");
     printf("  newt.exe --parse <file.nt>   Print the parse tree\n");
     printf("  newt.exe --version           Print the Newt version\n");
@@ -305,6 +307,11 @@ static Token lex_string(Lexer *lexer) {
     while (lexer_peek(lexer) != '"' &&
            lexer_peek(lexer) != '\n' &&
            !lexer_is_at_end(lexer)) {
+        if (lexer_peek(lexer) == '\\' &&
+            lexer_peek_next(lexer) != '\0' &&
+            lexer_peek_next(lexer) != '\n') {
+            lexer_advance(lexer);
+        }
         lexer_advance(lexer);
     }
 
@@ -1687,6 +1694,10 @@ typedef struct {
     int scope_depth;
     int is_returning;
     Value return_value;
+    int script_argument_count;
+    char **script_arguments;
+    char *runtime_strings[NEWT_MAX_RUNTIME_STRINGS];
+    int runtime_string_count;
     int had_error;
 } Interpreter;
 
@@ -1812,6 +1823,95 @@ static void runtime_name_error(Interpreter *interpreter, Token token, const char
              token.length,
              token.start);
     runtime_error(interpreter, token, detailed_message);
+}
+
+static int make_runtime_string(Interpreter *interpreter,
+                               Token source,
+                               char *characters,
+                               int content_length,
+                               Value *value) {
+    Token string = source;
+
+    if (interpreter->runtime_string_count >= NEWT_MAX_RUNTIME_STRINGS) {
+        free(characters);
+        runtime_error(interpreter, source, "too many runtime strings");
+        return 0;
+    }
+
+    string.type = TOKEN_STRING;
+    string.start = characters;
+    string.length = content_length + 2;
+    string.error_message = NULL;
+    interpreter->runtime_strings[interpreter->runtime_string_count] = characters;
+    interpreter->runtime_string_count++;
+    if (value != NULL) {
+        *value = make_string_value(string);
+    }
+    return 1;
+}
+
+static int eval_string_literal(Interpreter *interpreter, Token token, Value *value) {
+    char *characters;
+    int input_index;
+    int output_index = 1;
+    int has_escape = 0;
+
+    for (input_index = 1; input_index < token.length - 1; input_index++) {
+        if (token.start[input_index] == '\\') {
+            has_escape = 1;
+            break;
+        }
+    }
+    if (!has_escape) {
+        *value = make_string_value(token);
+        return 1;
+    }
+
+    characters = malloc((size_t)token.length + 1);
+    if (characters == NULL) {
+        runtime_error(interpreter, token, "not enough memory for string");
+        return 0;
+    }
+    characters[0] = '"';
+
+    for (input_index = 1; input_index < token.length - 1; input_index++) {
+        char ch = token.start[input_index];
+
+        if (ch == '\\' && input_index + 1 < token.length - 1) {
+            char escaped = token.start[input_index + 1];
+
+            if (escaped == 'n') {
+                characters[output_index++] = '\n';
+                input_index++;
+                continue;
+            }
+            if (escaped == 'r') {
+                characters[output_index++] = '\r';
+                input_index++;
+                continue;
+            }
+            if (escaped == 't') {
+                characters[output_index++] = '\t';
+                input_index++;
+                continue;
+            }
+            if (escaped == '\\' || escaped == '"') {
+                characters[output_index++] = escaped;
+                input_index++;
+                continue;
+            }
+        }
+
+        characters[output_index++] = ch;
+    }
+
+    characters[output_index++] = '"';
+    characters[output_index] = '\0';
+    return make_runtime_string(interpreter,
+                               token,
+                               characters,
+                               output_index - 2,
+                               value);
 }
 
 static void runtime_function_arity_error(Interpreter *interpreter,
@@ -1958,8 +2058,7 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             return 1;
         }
         case EXPR_STRING:
-            *value = make_string_value(expr->token);
-            return 1;
+            return eval_string_literal(interpreter, expr->token, value);
         case EXPR_CALL:
             return call_function(interpreter, expr, value);
         case EXPR_UNARY:
@@ -2179,7 +2278,12 @@ static void print_number(double number) {
 
 static void print_string_token(Token token) {
     if (token.length >= 2) {
-        printf("%.*s\n", token.length - 2, token.start + 1);
+        int content_length = token.length - 2;
+
+        printf("%.*s", content_length, token.start + 1);
+        if (content_length == 0 || token.start[token.length - 2] != '\n') {
+            putchar('\n');
+        }
     } else {
         printf("\n");
     }
@@ -2227,10 +2331,294 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
     return 1;
 }
 
+static int check_builtin_arity(Interpreter *interpreter, Expr *call, int expected) {
+    char message[160];
+
+    if (call->argument_count == expected) {
+        return 1;
+    }
+
+    snprintf(message,
+             sizeof(message),
+             "%.*s expects %d argument%s, got %d",
+             call->token.length,
+             call->token.start,
+             expected,
+             expected == 1 ? "" : "s",
+             call->argument_count);
+    runtime_error(interpreter, call->token, message);
+    return 0;
+}
+
+static int copy_file_path(Interpreter *interpreter,
+                          Token call_token,
+                          Value path_value,
+                          const char *subject,
+                          char path[1024]) {
+    int path_length;
+
+    if (path_value.type != VALUE_STRING) {
+        runtime_type_error(interpreter,
+                           call_token,
+                           subject,
+                           "a string",
+                           path_value);
+        return 0;
+    }
+
+    path_length = path_value.string.length - 2;
+    if (path_length < 0) {
+        path_length = 0;
+    }
+    if (path_length >= 1024) {
+        runtime_error(interpreter, call_token, "file path is too long");
+        return 0;
+    }
+
+    memcpy(path, path_value.string.start + 1, (size_t)path_length);
+    path[path_length] = '\0';
+    return 1;
+}
+
+static int call_file_read(Interpreter *interpreter, Expr *call, Value *value) {
+    Expr *path_expression;
+    Value path_value;
+    char path[1024];
+    char message[1200];
+    char *characters;
+    FILE *file;
+    long file_size;
+    size_t bytes_read;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+
+    path_expression = interpreter->parser->call_arguments[call->argument_start];
+    if (!eval_expression(interpreter, path_expression, &path_value)) {
+        return 0;
+    }
+    if (!copy_file_path(interpreter,
+                        call->token,
+                        path_value,
+                        "file_read path",
+                        path)) {
+        return 0;
+    }
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        snprintf(message, sizeof(message), "file_read could not open '%s'", path);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        runtime_error(interpreter, call->token, "file_read could not seek in file");
+        return 0;
+    }
+
+    file_size = ftell(file);
+    if (file_size < 0 || file_size > INT_MAX - 2) {
+        fclose(file);
+        runtime_error(interpreter, call->token, "file_read file is too large");
+        return 0;
+    }
+    rewind(file);
+
+    characters = malloc((size_t)file_size + 3);
+    if (characters == NULL) {
+        fclose(file);
+        runtime_error(interpreter, call->token, "not enough memory to read file");
+        return 0;
+    }
+
+    characters[0] = '"';
+    bytes_read = fread(characters + 1, 1, (size_t)file_size, file);
+    if (bytes_read != (size_t)file_size && ferror(file)) {
+        free(characters);
+        fclose(file);
+        runtime_error(interpreter, call->token, "file_read could not read file");
+        return 0;
+    }
+    if (fclose(file) != 0) {
+        free(characters);
+        runtime_error(interpreter, call->token, "file_read could not close file");
+        return 0;
+    }
+
+    characters[bytes_read + 1] = '"';
+    characters[bytes_read + 2] = '\0';
+    return make_runtime_string(interpreter,
+                               call->token,
+                               characters,
+                               (int)bytes_read,
+                               value);
+}
+
+static int call_file_write(Interpreter *interpreter,
+                           Expr *call,
+                           const char *mode,
+                           const char *name,
+                           Value *value) {
+    Expr *path_expression;
+    Expr *text_expression;
+    Value path_value;
+    Value text_value;
+    char path[1024];
+    char message[1200];
+    char path_subject[64];
+    char text_subject[64];
+    FILE *file;
+    int text_length;
+    size_t bytes_written;
+
+    if (!check_builtin_arity(interpreter, call, 2)) {
+        return 0;
+    }
+
+    path_expression = interpreter->parser->call_arguments[call->argument_start];
+    text_expression = interpreter->parser->call_arguments[call->argument_start + 1];
+    if (!eval_expression(interpreter, path_expression, &path_value)) {
+        return 0;
+    }
+
+    snprintf(path_subject, sizeof(path_subject), "%s path", name);
+    if (!copy_file_path(interpreter,
+                        call->token,
+                        path_value,
+                        path_subject,
+                        path)) {
+        return 0;
+    }
+    if (!eval_expression(interpreter, text_expression, &text_value)) {
+        return 0;
+    }
+    if (text_value.type != VALUE_STRING) {
+        snprintf(text_subject, sizeof(text_subject), "%s text", name);
+        runtime_type_error(interpreter,
+                           call->token,
+                           text_subject,
+                           "a string",
+                           text_value);
+        return 0;
+    }
+
+    file = fopen(path, mode);
+    if (file == NULL) {
+        snprintf(message, sizeof(message), "%s could not open '%s'", name, path);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+
+    text_length = text_value.string.length - 2;
+    if (text_length < 0) {
+        text_length = 0;
+    }
+    bytes_written = fwrite(text_value.string.start + 1,
+                           1,
+                           (size_t)text_length,
+                           file);
+    if (bytes_written != (size_t)text_length) {
+        fclose(file);
+        runtime_error(interpreter, call->token, "could not write complete file text");
+        return 0;
+    }
+    if (fclose(file) != 0) {
+        runtime_error(interpreter, call->token, "could not close output file");
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_bool_value(1);
+    }
+    return 1;
+}
+
+static int call_arg_count(Interpreter *interpreter, Expr *call, Value *value) {
+    if (!check_builtin_arity(interpreter, call, 0)) {
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value((double)interpreter->script_argument_count);
+    }
+    return 1;
+}
+
+static int call_arg(Interpreter *interpreter, Expr *call, Value *value) {
+    Expr *index_expression;
+    Value index_value;
+    double index;
+    const char *argument;
+    size_t argument_length;
+    char *characters;
+    char message[160];
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+
+    index_expression = interpreter->parser->call_arguments[call->argument_start];
+    if (!eval_expression(interpreter, index_expression, &index_value)) {
+        return 0;
+    }
+    if (index_value.type != VALUE_NUMBER) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "arg index",
+                           "a number",
+                           index_value);
+        return 0;
+    }
+
+    index = index_value.number;
+    if (!isfinite(index) || floor(index) != index) {
+        runtime_error(interpreter, call->token, "arg index must be a whole number");
+        return 0;
+    }
+    if (index < 0 || index >= interpreter->script_argument_count) {
+        snprintf(message,
+                 sizeof(message),
+                 "arg index %.0f is out of range for %d script argument%s",
+                 index,
+                 interpreter->script_argument_count,
+                 interpreter->script_argument_count == 1 ? "" : "s");
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+
+    if (value == NULL) {
+        return 1;
+    }
+
+    argument = interpreter->script_arguments[(int)index];
+    argument_length = strlen(argument);
+    if (argument_length > INT_MAX - 2) {
+        runtime_error(interpreter, call->token, "script argument is too long");
+        return 0;
+    }
+
+    characters = malloc(argument_length + 3);
+    if (characters == NULL) {
+        runtime_error(interpreter, call->token, "not enough memory for script argument");
+        return 0;
+    }
+    characters[0] = '"';
+    memcpy(characters + 1, argument, argument_length);
+    characters[argument_length + 1] = '"';
+    characters[argument_length + 2] = '\0';
+    return make_runtime_string(interpreter,
+                               call->token,
+                               characters,
+                               (int)argument_length,
+                               value);
+}
+
 static int call_function(Interpreter *interpreter,
                          Expr *call,
                          Value *value) {
-    Function *function = find_function(interpreter, call->token);
+    Function *function;
     Value argument_values[NEWT_MAX_FUNCTION_PARAMETERS];
     Value returned_value = make_number_value(0);
     Value previous_return_value = interpreter->return_value;
@@ -2239,6 +2627,24 @@ static int call_function(Interpreter *interpreter,
     int succeeded = 1;
     int did_return;
     int i;
+
+    if (token_text_equals(call->token, "arg_count")) {
+        return call_arg_count(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "arg")) {
+        return call_arg(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "file_read")) {
+        return call_file_read(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "file_write")) {
+        return call_file_write(interpreter, call, "wb", "file_write", value);
+    }
+    if (token_text_equals(call->token, "file_append")) {
+        return call_file_write(interpreter, call, "ab", "file_append", value);
+    }
+
+    function = find_function(interpreter, call->token);
 
     if (function == NULL) {
         runtime_name_error(interpreter, call->token, "undefined function");
@@ -2411,7 +2817,10 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
 
     return 0;
 }
-static int run_program(const char *path, const char *source) {
+static int run_program(const char *path,
+                       const char *source,
+                       int script_argument_count,
+                       char **script_arguments) {
     Parser parser;
     Interpreter interpreter;
     int i;
@@ -2428,6 +2837,9 @@ static int run_program(const char *path, const char *source) {
     interpreter.scope_depth = 0;
     interpreter.is_returning = 0;
     interpreter.return_value = make_number_value(0);
+    interpreter.script_argument_count = script_argument_count;
+    interpreter.script_arguments = script_arguments;
+    interpreter.runtime_string_count = 0;
     interpreter.had_error = 0;
 
     for (i = 0; i < parser.top_level_statement_count && !interpreter.had_error; i++) {
@@ -2435,7 +2847,14 @@ static int run_program(const char *path, const char *source) {
         execute_statement(&interpreter, &parser.statements[stmt_index]);
     }
 
-    return !interpreter.had_error;
+    {
+        int succeeded = !interpreter.had_error;
+
+        for (i = 0; i < interpreter.runtime_string_count; i++) {
+            free(interpreter.runtime_strings[i]);
+        }
+        return succeeded;
+    }
 }
 
 static void print_source(const char *source) {
@@ -2454,6 +2873,8 @@ int main(int argc, char **argv) {
     int parse_mode = 0;
     int run_mode = 0;
     int success = 1;
+    int script_argument_count = 0;
+    char **script_arguments = NULL;
     const char *path = NULL;
 
     if (argc < 2) {
@@ -2499,12 +2920,14 @@ int main(int argc, char **argv) {
     } else if (strcmp(argv[1], "--run") == 0) {
         if (argc < 3) {
             printf("error: missing input file\n");
-            printf("usage: newt --run <file.nt>\n");
+            printf("usage: newt --run <file.nt> [args...]\n");
             return 1;
         }
 
         run_mode = 1;
         path = argv[2];
+        script_argument_count = argc - 3;
+        script_arguments = argv + 3;
     } else {
         path = argv[1];
     }
@@ -2519,7 +2942,10 @@ int main(int argc, char **argv) {
     } else if (parse_mode) {
         print_parse_tree(path, source);
     } else if (run_mode) {
-        success = run_program(path, source);
+        success = run_program(path,
+                              source,
+                              script_argument_count,
+                              script_arguments);
     } else {
         print_source(source);
     }

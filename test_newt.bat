@@ -7,6 +7,26 @@ if errorlevel 1 exit /b 1
 echo.
 echo Running examples...
 
+echo [args_test.nt]
+.\newt.exe --run examples/args_test.nt hello newt
+if errorlevel 1 exit /b 1
+
+echo [ghostlog_args.nt]
+.\newt.exe --run examples/ghostlog_args.nt StraySignal "alchemy station"
+if errorlevel 1 exit /b 1
+
+echo [file_read_test.nt]
+.\newt.exe --run examples/file_read_test.nt
+if errorlevel 1 exit /b 1
+
+echo [file_write_test.nt]
+.\newt.exe --run examples/file_write_test.nt
+if errorlevel 1 exit /b 1
+
+echo [file_append_test.nt]
+.\newt.exe --run examples/file_append_test.nt
+if errorlevel 1 exit /b 1
+
 echo [sqrt_test.nt]
 .\newt.exe --run examples/sqrt_test.nt
 if errorlevel 1 exit /b 1

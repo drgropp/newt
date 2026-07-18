@@ -2,7 +2,7 @@
 
 Newt is a small experimental scripting language implemented in C. It is designed to be readable, direct, and easy to learn, with simple statements and `end`-delimited blocks.
 
-This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as arrays, imports, modules, file I/O, and networking are intentionally left for later.
+This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as arrays, imports, modules, HTTP, and JSON are intentionally left for later.
 
 ## Build
 
@@ -36,6 +36,12 @@ Use `--run` to execute a `.nt` source file:
 
 Runtime errors include the source file, line, and column. A failed run exits with a nonzero status.
 
+Pass script arguments after the source file. Newt exposes them through `arg_count()` and zero-based `arg(index)`:
+
+```sh
+./newt.exe --run examples/args_test.nt hello newt
+```
+
 Newt also has development modes for inspecting tokens and parse trees:
 
 ```sh
@@ -48,6 +54,11 @@ Newt also has development modes for inspecting tokens and parse trees:
 Run one example directly:
 
 ```sh
+./newt.exe --run examples/args_test.nt hello newt
+./newt.exe --run examples/ghostlog_args.nt StraySignal "alchemy station"
+./newt.exe --run examples/file_read_test.nt
+./newt.exe --run examples/file_write_test.nt
+./newt.exe --run examples/file_append_test.nt
 ./newt.exe --run examples/sqrt_test.nt
 ./newt.exe --run examples/and_test.nt
 ./newt.exe --run examples/or_test.nt
@@ -90,6 +101,8 @@ Newt currently supports:
 - `while / end` loops
 - user-defined functions with parameters and return values
 - the built-in `sqrt(number)` function
+- local file I/O with `file_read`, `file_write`, and `file_append`
+- script arguments with `arg_count()` and `arg(index)`
 - line comments beginning with `#`
 
 ## Language examples
@@ -181,10 +194,41 @@ print result
 
 Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters. Because Newt does not have a `none` value yet, a value-producing call to a function without an explicit `return` safely produces the number `0`.
 
-Arrays, imports/modules, and file I/O are not part of Newt yet.
+Basic file I/O:
+
+```newt
+val note = file_read("notes.txt")
+print note
+
+file_write("notes.txt", "first line")
+file_append("notes.txt", "\nsecond line")
+```
+
+`file_read` returns the complete file text. `file_write` overwrites a file and `file_append` adds to it; both return `true` after a successful write.
+
+Command-line arguments:
+
+```sh
+./newt.exe --run examples/ghostlog_args.nt StraySignal "alchemy station"
+```
+
+```newt
+print arg_count()
+print arg(0)
+print arg(1)
+```
+
+`arg_count()` returns the number of values after the script path. `arg(0)` returns the first value, and an invalid index produces a runtime error.
+
+Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
 
 ## Main examples
 
+- `args_test.nt` demonstrates counting and reading script arguments.
+- `ghostlog_args.nt` demonstrates passing a quoted argument containing a space.
+- `file_read_test.nt` demonstrates reading a complete text file.
+- `file_write_test.nt` demonstrates creating or overwriting a text file.
+- `file_append_test.nt` demonstrates appending text to a file.
 - `sqrt_test.nt` demonstrates `sqrt` with a literal and a variable.
 - `and_test.nt` combines boolean values and numeric comparisons.
 - `or_test.nt` demonstrates `or` with boolean values and comparisons.

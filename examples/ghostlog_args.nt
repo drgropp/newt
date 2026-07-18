@@ -1,0 +1,6 @@
+# Ghostlog args test
+
+print "project:"
+print arg(0)
+print "status:"
+print arg(1)

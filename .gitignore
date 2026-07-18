@@ -7,3 +7,5 @@ newt
 *.ilk
 .DS_Store
 Thumbs.db
+examples/out_note.txt
+examples/out_append.txt

@@ -101,3 +101,33 @@ A comment begins with `#` and continues to the end of the line.
 val side = 4
 print side * side
 ```
+
+## File I/O
+
+Use `file_read` to read a complete text file. Use `file_write` to create or overwrite a file, and `file_append` to add text to its end.
+
+```newt
+val note = file_read("notes.txt")
+print note
+
+file_write("notes.txt", "first line")
+file_append("notes.txt", "\nsecond line")
+```
+
+All file paths and written text must be strings. `file_write` and `file_append` return `true` when successful.
+
+## Command-line arguments
+
+Arguments written after the script path are available through `arg_count()` and zero-based `arg(index)`.
+
+```sh
+./newt.exe --run examples/args_test.nt hello newt
+```
+
+```newt
+print arg_count()
+print arg(0)
+print arg(1)
+```
+
+This prints `2`, `hello`, and `newt`. An index outside the available arguments is a runtime error.
