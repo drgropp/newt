@@ -47,6 +47,14 @@ echo [function_test.nt]
 .\newt.exe --run examples/function_test.nt
 if errorlevel 1 exit /b 1
 
+echo [function_params_test.nt]
+.\newt.exe --run examples/function_params_test.nt
+if errorlevel 1 exit /b 1
+
+echo [return_test.nt]
+.\newt.exe --run examples/return_test.nt
+if errorlevel 1 exit /b 1
+
 echo [calculator.nt]
 .\newt.exe --run examples/calculator.nt
 if errorlevel 1 exit /b 1

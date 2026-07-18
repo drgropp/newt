@@ -1,0 +1,12 @@
+# Function params test
+
+fn add(a, b)
+    return a + b
+end
+
+fn double(x)
+    return x * 2
+end
+
+print add(2, 3)
+print double(10)

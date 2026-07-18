@@ -13,6 +13,7 @@ Created by drgropp.
 #define NEWT_VERSION "0.1.0"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
 #define NEWT_MAX_CALL_DEPTH 256
+#define NEWT_MAX_FUNCTION_PARAMETERS 16
 
 typedef enum {
     TOKEN_EOF,
@@ -545,6 +546,7 @@ typedef enum {
     EXPR_FALSE,
     EXPR_UNARY,
     EXPR_BINARY,
+    EXPR_CALL,
     EXPR_INPUT_NUMBER,
     EXPR_SQRT
 } ExprKind;
@@ -556,6 +558,7 @@ typedef enum {
     STMT_MUT_DECL,
     STMT_FN_DECL,
     STMT_CALL,
+    STMT_RETURN,
     STMT_ASSIGN,
     STMT_IF,
     STMT_WHILE,
@@ -573,6 +576,8 @@ typedef struct {
     int has_else;
     int body_statements[256];
     int body_count;
+    int parameter_start;
+    int parameter_count;
 } Stmt;
 
 struct Expr {
@@ -580,6 +585,7 @@ struct Expr {
     Token token;
     Expr *left;
     Expr *right;
+    int argument_start;
     int argument_count;
 };
 
@@ -593,6 +599,10 @@ typedef struct {
     int expression_count;
     Stmt statements[256];
     int statement_count;
+    Token parameters[256];
+    int parameter_count;
+    Expr *call_arguments[1024];
+    int call_argument_count;
     int top_level_statements[256];
     int top_level_statement_count;
 } Parser;
@@ -603,6 +613,8 @@ static void parser_init(Parser *parser, const char *path, const char *source) {
     parser->had_error = 0;
     parser->expression_count = 0;
     parser->statement_count = 0;
+    parser->parameter_count = 0;
+    parser->call_argument_count = 0;
     parser->top_level_statement_count = 0;
     parser->current.type = TOKEN_EOF;
     parser->current.start = source;
@@ -674,6 +686,7 @@ static Expr *new_expr(Parser *parser, ExprKind kind, Token token) {
     expr->token = token;
     expr->left = NULL;
     expr->right = NULL;
+    expr->argument_start = 0;
     expr->argument_count = 0;
     return expr;
 }
@@ -695,6 +708,8 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->else_count = 0;
     stmt->has_else = 0;
     stmt->body_count = 0;
+    stmt->parameter_start = 0;
+    stmt->parameter_count = 0;
     return stmt;
 }
 
@@ -719,6 +734,53 @@ static void add_top_level_statement(Parser *parser, Stmt *stmt) {
 
 static Expr *parse_expression(Parser *parser);
 static Stmt *parse_statement(Parser *parser);
+
+static Expr *finish_function_call(Parser *parser, Token name) {
+    Expr *call = new_expr(parser, EXPR_CALL, name);
+    Expr *arguments[NEWT_MAX_FUNCTION_PARAMETERS];
+    int i;
+
+    if (call == NULL) {
+        return NULL;
+    }
+
+    if (parser->current.type != TOKEN_RIGHT_PAREN) {
+        do {
+            Expr *argument;
+
+            if (call->argument_count >= NEWT_MAX_FUNCTION_PARAMETERS) {
+                parser_error(parser,
+                             parser->current,
+                             "function call has too many arguments");
+                return NULL;
+            }
+
+            argument = parse_expression(parser);
+            if (argument == NULL || parser->had_error) {
+                return NULL;
+            }
+            arguments[call->argument_count] = argument;
+            call->argument_count++;
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+
+    parser_consume(parser, TOKEN_RIGHT_PAREN, "expected ')' after function arguments");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    if (parser->call_argument_count + call->argument_count > 1024) {
+        parser_error(parser, name, "too many function call arguments");
+        return NULL;
+    }
+    call->argument_start = parser->call_argument_count;
+    for (i = 0; i < call->argument_count; i++) {
+        parser->call_arguments[parser->call_argument_count] = arguments[i];
+        parser->call_argument_count++;
+    }
+
+    return call;
+}
 
 static Expr *parse_primary(Parser *parser) {
     if (parser_match(parser, TOKEN_NUMBER)) {
@@ -769,11 +831,8 @@ static Expr *parse_primary(Parser *parser) {
             return expr;
         }
 
-        if (parser->current.type == TOKEN_LEFT_PAREN) {
-            parser_error(parser,
-                         parser->current,
-                         "function calls cannot be used in expressions yet");
-            return NULL;
+        if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+            return finish_function_call(parser, name);
         }
 
         return new_expr(parser, EXPR_IDENT, name);
@@ -993,7 +1052,7 @@ static void print_indent(int spaces) {
     }
 }
 
-static void print_expression_tree(Expr *expr, int indent) {
+static void print_expression_tree(Parser *parser, Expr *expr, int indent) {
     if (expr == NULL) {
         return;
     }
@@ -1018,20 +1077,33 @@ static void print_expression_tree(Expr *expr, int indent) {
             break;
         case EXPR_UNARY:
             printf("UNARY %.*s\n", expr->token.length, expr->token.start);
-            print_expression_tree(expr->left, indent + 2);
+            print_expression_tree(parser, expr->left, indent + 2);
             break;
         case EXPR_BINARY:
             printf("BINARY %.*s\n", expr->token.length, expr->token.start);
-            print_expression_tree(expr->left, indent + 2);
-            print_expression_tree(expr->right, indent + 2);
+            print_expression_tree(parser, expr->left, indent + 2);
+            print_expression_tree(parser, expr->right, indent + 2);
             break;
+        case EXPR_CALL: {
+            int i;
+
+            printf("CALL name=%.*s arguments=%d\n",
+                   expr->token.length,
+                   expr->token.start,
+                   expr->argument_count);
+            for (i = 0; i < expr->argument_count; i++) {
+                Expr *argument = parser->call_arguments[expr->argument_start + i];
+                print_expression_tree(parser, argument, indent + 2);
+            }
+            break;
+        }
         case EXPR_INPUT_NUMBER:
             printf("INPUT_NUMBER %.*s\n", expr->token.length, expr->token.start);
             break;
         case EXPR_SQRT:
             printf("SQRT arguments=%d\n", expr->argument_count);
             if (expr->left != NULL) {
-                print_expression_tree(expr->left, indent + 2);
+                print_expression_tree(parser, expr->left, indent + 2);
             }
             break;
     }
@@ -1118,25 +1190,40 @@ static Stmt *parse_assignment_statement(Parser *parser) {
 }
 
 static Stmt *parse_function_call(Parser *parser, Token name) {
+    Expr *call;
+
     parser_consume(parser, TOKEN_LEFT_PAREN, "expected '(' after function name");
     if (parser->had_error) {
         return NULL;
     }
 
-    if (parser->current.type != TOKEN_RIGHT_PAREN) {
-        parser_error(parser,
-                     parser->current,
-                     "function calls do not take arguments yet");
+    call = finish_function_call(parser, name);
+    if (call == NULL || parser->had_error) {
         return NULL;
     }
 
-    parser_advance(parser);
     parser_consume_statement_end(parser);
     if (parser->had_error) {
         return NULL;
     }
 
-    return new_stmt(parser, STMT_CALL, name, NULL);
+    return new_stmt(parser, STMT_CALL, name, call);
+}
+
+static Stmt *parse_return_statement(Parser *parser) {
+    Token return_token = parser->previous;
+    Expr *value = parse_expression(parser);
+
+    if (value == NULL || parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    return new_stmt(parser, STMT_RETURN, return_token, value);
 }
 
 static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int statements[256], int *count) {
@@ -1165,6 +1252,8 @@ static Stmt *parse_function_declaration(Parser *parser) {
     Stmt *stmt;
     int body_statements[256];
     int body_count;
+    int parameter_start;
+    int parameter_count = 0;
     int i;
 
     parser_consume(parser, TOKEN_IDENT, "expected function name after 'fn'");
@@ -1178,13 +1267,52 @@ static Stmt *parse_function_declaration(Parser *parser) {
         return NULL;
     }
 
+    parameter_start = parser->parameter_count;
     if (parser->current.type != TOKEN_RIGHT_PAREN) {
-        parser_error(parser,
-                     parser->current,
-                     "function declarations do not take parameters yet");
+        do {
+            Token parameter;
+            int parameter_index;
+
+            if (parameter_count >= NEWT_MAX_FUNCTION_PARAMETERS) {
+                parser_error(parser,
+                             parser->current,
+                             "function declaration has too many parameters");
+                return NULL;
+            }
+
+            parser_consume(parser, TOKEN_IDENT, "expected parameter name");
+            if (parser->had_error) {
+                return NULL;
+            }
+            parameter = parser->previous;
+
+            for (parameter_index = parameter_start;
+                 parameter_index < parser->parameter_count;
+                 parameter_index++) {
+                Token existing = parser->parameters[parameter_index];
+                if (existing.length == parameter.length &&
+                    strncmp(existing.start,
+                            parameter.start,
+                            (size_t)parameter.length) == 0) {
+                    parser_error(parser, parameter, "duplicate parameter name");
+                    return NULL;
+                }
+            }
+
+            if (parser->parameter_count >= 256) {
+                parser_error(parser, parameter, "too many function parameters");
+                return NULL;
+            }
+            parser->parameters[parser->parameter_count] = parameter;
+            parser->parameter_count++;
+            parameter_count++;
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+
+    parser_consume(parser, TOKEN_RIGHT_PAREN, "expected ')' after function parameters");
+    if (parser->had_error) {
         return NULL;
     }
-    parser_advance(parser);
 
     parser_consume_statement_end(parser);
     if (parser->had_error) {
@@ -1215,6 +1343,8 @@ static Stmt *parse_function_declaration(Parser *parser) {
         stmt->body_statements[i] = body_statements[i];
     }
     stmt->body_count = body_count;
+    stmt->parameter_start = parameter_start;
+    stmt->parameter_count = parameter_count;
     return stmt;
 }
 
@@ -1368,6 +1498,10 @@ static Stmt *parse_statement(Parser *parser) {
         return parse_function_declaration(parser);
     }
 
+    if (parser_match(parser, TOKEN_RETURN)) {
+        return parse_return_statement(parser);
+    }
+
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
     }
@@ -1401,16 +1535,25 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
         case STMT_VAL_DECL:
             print_indent(indent);
             printf("VAL_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
-            print_expression_tree(stmt->expression, indent + 2);
+            print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_MUT_DECL:
             print_indent(indent);
             printf("MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
-            print_expression_tree(stmt->expression, indent + 2);
+            print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_FN_DECL:
             print_indent(indent);
             printf("FN_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            if (stmt->parameter_count > 0) {
+                print_indent(indent + 2);
+                printf("PARAMETERS\n");
+                for (i = 0; i < stmt->parameter_count; i++) {
+                    Token parameter = parser->parameters[stmt->parameter_start + i];
+                    print_indent(indent + 4);
+                    printf("PARAM name=%.*s\n", parameter.length, parameter.start);
+                }
+            }
             print_indent(indent + 2);
             printf("BODY\n");
             for (i = 0; i < stmt->body_count; i++) {
@@ -1419,20 +1562,24 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             }
             break;
         case STMT_CALL:
+            print_expression_tree(parser, stmt->expression, indent);
+            break;
+        case STMT_RETURN:
             print_indent(indent);
-            printf("CALL name=%.*s\n", stmt->name.length, stmt->name.start);
+            printf("RETURN\n");
+            print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_ASSIGN:
             print_indent(indent);
             printf("ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
-            print_expression_tree(stmt->expression, indent + 2);
+            print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_IF:
             print_indent(indent);
             printf("IF\n");
             print_indent(indent + 2);
             printf("CONDITION\n");
-            print_expression_tree(stmt->expression, indent + 4);
+            print_expression_tree(parser, stmt->expression, indent + 4);
             print_indent(indent + 2);
             printf("THEN\n");
             for (i = 0; i < stmt->then_count; i++) {
@@ -1454,7 +1601,7 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             printf("WHILE\n");
             print_indent(indent + 2);
             printf("CONDITION\n");
-            print_expression_tree(stmt->expression, indent + 4);
+            print_expression_tree(parser, stmt->expression, indent + 4);
             print_indent(indent + 2);
             printf("BODY\n");
             for (i = 0; i < stmt->body_count; i++) {
@@ -1465,7 +1612,7 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
         case STMT_PRINT:
             print_indent(indent);
             printf("PRINT\n");
-            print_expression_tree(stmt->expression, indent + 2);
+            print_expression_tree(parser, stmt->expression, indent + 2);
             break;
     }
 }
@@ -1522,6 +1669,7 @@ typedef struct {
     Token name;
     Value value;
     int is_mutable;
+    int scope_depth;
 } Variable;
 
 typedef struct {
@@ -1536,6 +1684,9 @@ typedef struct {
     Function functions[256];
     int function_count;
     int call_depth;
+    int scope_depth;
+    int is_returning;
+    Value return_value;
     int had_error;
 } Interpreter;
 
@@ -1663,10 +1814,27 @@ static void runtime_name_error(Interpreter *interpreter, Token token, const char
     runtime_error(interpreter, token, detailed_message);
 }
 
+static void runtime_function_arity_error(Interpreter *interpreter,
+                                         Token name,
+                                         int expected,
+                                         int actual) {
+    char message[160];
+
+    snprintf(message,
+             sizeof(message),
+             "function '%.*s' expects %d argument%s, got %d",
+             name.length,
+             name.start,
+             expected,
+             expected == 1 ? "" : "s",
+             actual);
+    runtime_error(interpreter, name, message);
+}
+
 static Variable *find_variable(Interpreter *interpreter, Token name) {
     int i;
 
-    for (i = 0; i < interpreter->variable_count; i++) {
+    for (i = interpreter->variable_count - 1; i >= 0; i--) {
         if (token_names_match(interpreter->variables[i].name, name)) {
             return &interpreter->variables[i];
         }
@@ -1703,6 +1871,11 @@ static int define_function(Interpreter *interpreter, Stmt *declaration) {
     interpreter->function_count++;
     return 1;
 }
+
+static int call_function(Interpreter *interpreter,
+                         Expr *call,
+                         int requires_value,
+                         Value *value);
 
 static int read_number_token(Interpreter *interpreter, Token token, double *number) {
     char text[64];
@@ -1788,6 +1961,8 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
         case EXPR_STRING:
             *value = make_string_value(expr->token);
             return 1;
+        case EXPR_CALL:
+            return call_function(interpreter, expr, 1, value);
         case EXPR_UNARY:
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
@@ -1966,12 +2141,18 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
 }
 
 static int define_variable(Interpreter *interpreter, Token name, Value value, int is_mutable) {
-    Variable *existing;
+    int i;
 
-    existing = find_variable(interpreter, name);
-    if (existing != NULL) {
-        runtime_name_error(interpreter, name, "variable already defined");
-        return 0;
+    for (i = interpreter->variable_count - 1; i >= 0; i--) {
+        Variable *existing = &interpreter->variables[i];
+
+        if (existing->scope_depth < interpreter->scope_depth) {
+            break;
+        }
+        if (token_names_match(existing->name, name)) {
+            runtime_name_error(interpreter, name, "variable already defined in this scope");
+            return 0;
+        }
     }
 
     if (interpreter->variable_count >= 256) {
@@ -1982,6 +2163,7 @@ static int define_variable(Interpreter *interpreter, Token name, Value value, in
     interpreter->variables[interpreter->variable_count].name = name;
     interpreter->variables[interpreter->variable_count].value = value;
     interpreter->variables[interpreter->variable_count].is_mutable = is_mutable;
+    interpreter->variables[interpreter->variable_count].scope_depth = interpreter->scope_depth;
     interpreter->variable_count++;
     return 1;
 }
@@ -2034,7 +2216,9 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt);
 static int execute_statement_list(Interpreter *interpreter, int statements[256], int count) {
     int i;
 
-    for (i = 0; i < count && !interpreter->had_error; i++) {
+    for (i = 0;
+         i < count && !interpreter->had_error && !interpreter->is_returning;
+         i++) {
         int stmt_index = statements[i];
         if (!execute_statement(interpreter, &interpreter->parser->statements[stmt_index])) {
             return 0;
@@ -2043,6 +2227,97 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
 
     return 1;
 }
+
+static int call_function(Interpreter *interpreter,
+                         Expr *call,
+                         int requires_value,
+                         Value *value) {
+    Function *function = find_function(interpreter, call->token);
+    Value argument_values[NEWT_MAX_FUNCTION_PARAMETERS];
+    Value returned_value = make_number_value(0);
+    Value previous_return_value = interpreter->return_value;
+    int previous_returning = interpreter->is_returning;
+    int variable_start = interpreter->variable_count;
+    int succeeded = 1;
+    int did_return;
+    int i;
+
+    if (function == NULL) {
+        runtime_name_error(interpreter, call->token, "undefined function");
+        return 0;
+    }
+    if (call->argument_count != function->declaration->parameter_count) {
+        runtime_function_arity_error(interpreter,
+                                     call->token,
+                                     function->declaration->parameter_count,
+                                     call->argument_count);
+        return 0;
+    }
+    if (interpreter->call_depth >= NEWT_MAX_CALL_DEPTH) {
+        runtime_name_error(interpreter,
+                           call->token,
+                           "maximum call depth exceeded in function");
+        return 0;
+    }
+
+    for (i = 0; i < call->argument_count; i++) {
+        Expr *argument = interpreter->parser->call_arguments[call->argument_start + i];
+        if (!eval_expression(interpreter, argument, &argument_values[i])) {
+            return 0;
+        }
+    }
+
+    interpreter->call_depth++;
+    interpreter->scope_depth++;
+    interpreter->is_returning = 0;
+
+    for (i = 0; i < function->declaration->parameter_count; i++) {
+        Token parameter = interpreter->parser->parameters[
+            function->declaration->parameter_start + i];
+        if (!define_variable(interpreter, parameter, argument_values[i], 0)) {
+            succeeded = 0;
+            break;
+        }
+    }
+
+    if (succeeded) {
+        succeeded = execute_statement_list(interpreter,
+                                           function->declaration->body_statements,
+                                           function->declaration->body_count);
+    }
+
+    did_return = interpreter->is_returning;
+    if (did_return) {
+        returned_value = interpreter->return_value;
+    }
+
+    interpreter->variable_count = variable_start;
+    interpreter->scope_depth--;
+    interpreter->call_depth--;
+    interpreter->is_returning = previous_returning;
+    interpreter->return_value = previous_return_value;
+
+    if (!succeeded) {
+        return 0;
+    }
+    if (requires_value && !did_return) {
+        char message[160];
+
+        snprintf(message,
+                 sizeof(message),
+                 "function '%.*s' did not return a value",
+                 call->token.length,
+                 call->token.start);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+    if (value != NULL && did_return) {
+        *value = returned_value;
+    }
+
+    return 1;
+}
+
 static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
     Value value;
 
@@ -2053,28 +2328,21 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
     switch (stmt->kind) {
         case STMT_FN_DECL:
             return define_function(interpreter, stmt);
-        case STMT_CALL: {
-            Function *function = find_function(interpreter, stmt->name);
-            int succeeded;
-
-            if (function == NULL) {
-                runtime_name_error(interpreter, stmt->name, "undefined function");
+        case STMT_CALL:
+            return call_function(interpreter, stmt->expression, 0, NULL);
+        case STMT_RETURN:
+            if (interpreter->call_depth == 0) {
+                runtime_error(interpreter,
+                              stmt->name,
+                              "return can only be used inside a function");
                 return 0;
             }
-            if (interpreter->call_depth >= NEWT_MAX_CALL_DEPTH) {
-                runtime_name_error(interpreter,
-                                   stmt->name,
-                                   "maximum call depth exceeded in function");
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
             }
-
-            interpreter->call_depth++;
-            succeeded = execute_statement_list(interpreter,
-                                               function->declaration->body_statements,
-                                               function->declaration->body_count);
-            interpreter->call_depth--;
-            return succeeded;
-        }
+            interpreter->return_value = value;
+            interpreter->is_returning = 1;
+            return 1;
         case STMT_VAL_DECL:
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
@@ -2145,6 +2413,9 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 if (!execute_statement_list(interpreter, stmt->body_statements, stmt->body_count)) {
                     return 0;
                 }
+                if (interpreter->is_returning) {
+                    return 1;
+                }
             }
 
             return 0;
@@ -2167,6 +2438,9 @@ static int run_program(const char *path, const char *source) {
     interpreter.variable_count = 0;
     interpreter.function_count = 0;
     interpreter.call_depth = 0;
+    interpreter.scope_depth = 0;
+    interpreter.is_returning = 0;
+    interpreter.return_value = make_number_value(0);
     interpreter.had_error = 0;
 
     for (i = 0; i < parser.top_level_statement_count && !interpreter.had_error; i++) {

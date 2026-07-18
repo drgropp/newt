@@ -58,6 +58,8 @@ Run one example directly:
 ./newt.exe --run examples/if_test.nt
 ./newt.exe --run examples/else_if_test.nt
 ./newt.exe --run examples/function_test.nt
+./newt.exe --run examples/function_params_test.nt
+./newt.exe --run examples/return_test.nt
 ./newt.exe --run examples/calculator.nt
 ```
 
@@ -86,7 +88,7 @@ Newt currently supports:
 - unary minus and negative numbers
 - `if / else if / else / end` conditions
 - `while / end` loops
-- basic user-defined functions with no parameters or return values yet
+- user-defined functions with parameters and return values
 - the built-in `sqrt(number)` function
 - line comments beginning with `#`
 
@@ -166,17 +168,18 @@ val area = input_number("Area: ")
 print sqrt(area)
 ```
 
-Basic functions:
+Functions with parameters and return values:
 
 ```newt
-fn greet()
-    print "hello from function"
+fn add(a, b)
+    return a + b
 end
 
-greet()
+val result = add(2, 3)
+print result
 ```
 
-Functions currently take no parameters and do not return values. Function calls are standalone statements.
+Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters.
 
 ## Main examples
 
@@ -190,6 +193,8 @@ Functions currently take no parameters and do not return values. Function calls 
 - `if_test.nt` demonstrates comparisons with `if` and `else`.
 - `else_if_test.nt` demonstrates ordered `else if` branches and an `else` fallback.
 - `function_test.nt` demonstrates declaring and calling basic functions.
+- `function_params_test.nt` demonstrates parameters, arguments, and returned values.
+- `return_test.nt` demonstrates that `return` exits a function immediately.
 - `calculator.nt` demonstrates the four arithmetic operators.
 - `quadratic_test.nt` uses arithmetic and `sqrt` to solve a quadratic equation.
 

@@ -80,17 +80,17 @@ print sqrt(25)
 
 ## Functions
 
-Declare a function with `fn`, a name, empty parentheses, and `end`. Call it by writing its name followed by empty parentheses.
+Declare a function with `fn`, a name, optional parameter names, and `end`. Pass argument values in the function call. Use `return` to stop the function and send a value back.
 
 ```newt
-fn greet()
-    print "hello"
+fn add(a, b)
+    return a + b
 end
 
-greet()
+print add(2, 3)
 ```
 
-Functions currently have no parameters and no return values, so calls are standalone statements.
+Functions may still have no parameters. Calls whose return values are not needed can remain standalone statements. A function currently supports up to 16 parameters.
 
 ## Comments
 

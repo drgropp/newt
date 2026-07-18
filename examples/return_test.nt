@@ -1,0 +1,9 @@
+# Return test
+
+fn answer()
+    return 42
+    print "not reached"
+end
+
+val result = answer()
+print result
