@@ -189,8 +189,8 @@ static int lexer_match(Lexer *lexer, char expected) {
         return 0;
     }
 
-    lexer->current++;
-    return 1;
+   lexer_advance(lexer);
+return 1;
 }
 
 static Token make_token(Lexer *lexer, TokenType type) {
