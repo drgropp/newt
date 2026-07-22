@@ -116,12 +116,14 @@ file_append("notes.txt", "\nsecond line")
 
 All file paths and written text must be strings. `file_write` and `file_append` return `true` when successful.
 
+File I/O is an early feature. Newt reads a whole file into memory, does not create parent directories, and uses the operating system's normal path and permission rules.
+
 ## Command-line arguments
 
 Arguments written after the script path are available through `arg_count()` and zero-based `arg(index)`.
 
 ```sh
-./newt.exe --run examples/args_test.nt hello newt
+./newt.exe examples/args.nt hello newt
 ```
 
 ```newt

@@ -9,3 +9,6 @@ newt
 Thumbs.db
 examples/out_note.txt
 examples/out_append.txt
+examples/write_output.txt
+examples/append_output.txt
+examples/devlog.md

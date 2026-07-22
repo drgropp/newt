@@ -1,0 +1,5 @@
+# Generate a small Markdown development log
+
+file_write("examples/devlog.md", "# Devlog\n\n")
+file_append("examples/devlog.md", "Today I worked on Newt.\n")
+print file_read("examples/devlog.md")

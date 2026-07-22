@@ -7,12 +7,32 @@ if errorlevel 1 exit /b 1
 echo.
 echo Running examples...
 
+echo [args.nt - direct invocation]
+.\newt.exe examples/args.nt hello world
+if errorlevel 1 exit /b 1
+
+echo [read_file.nt - direct invocation]
+.\newt.exe examples/read_file.nt
+if errorlevel 1 exit /b 1
+
+echo [write_file.nt - direct invocation]
+.\newt.exe examples/write_file.nt
+if errorlevel 1 exit /b 1
+
+echo [append_file.nt - direct invocation]
+.\newt.exe examples/append_file.nt
+if errorlevel 1 exit /b 1
+
+echo [ghostlog.nt - direct invocation]
+.\newt.exe examples/ghostlog.nt
+if errorlevel 1 exit /b 1
+
 echo [args_test.nt]
 .\newt.exe --run examples/args_test.nt hello newt
 if errorlevel 1 exit /b 1
 
 echo [ghostlog_args.nt]
-.\newt.exe --run examples/ghostlog_args.nt StraySignal "alchemy station"
+.\newt.exe --run examples/ghostlog_args.nt GardenGame "alchemy station"
 if errorlevel 1 exit /b 1
 
 echo [file_read_test.nt]

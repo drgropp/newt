@@ -1,0 +1,5 @@
+# Append text to a file
+
+file_write("examples/append_output.txt", "first line\n")
+file_append("examples/append_output.txt", "new log line\n")
+print file_read("examples/append_output.txt")

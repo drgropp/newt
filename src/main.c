@@ -10,6 +10,7 @@ Created by drgropp.
 #include <ctype.h>
 #include <math.h>
 #include <limits.h>
+#include <errno.h>
 
 #define NEWT_VERSION "0.1.0"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
@@ -84,6 +85,7 @@ static void print_help(void) {
     printf("Newt %s\n", NEWT_VERSION);
     printf("\n");
     printf("Usage:\n");
+    printf("  newt.exe <file.nt> [args...]        Run a Newt program\n");
     printf("  newt.exe --run <file.nt> [args...]  Run a Newt program\n");
     printf("  newt.exe --tokens <file.nt>  Print lexer tokens\n");
     printf("  newt.exe --parse <file.nt>   Print the parse tree\n");
@@ -91,7 +93,7 @@ static void print_help(void) {
     printf("  newt.exe --help              Show this help\n");
     printf("\n");
     printf("Example:\n");
-    printf("  newt.exe --run examples/hello.nt\n");
+    printf("  newt.exe examples/hello.nt\n");
 }
 
 static char *read_file(const char *path) {
@@ -1694,6 +1696,7 @@ typedef struct {
     int scope_depth;
     int is_returning;
     Value return_value;
+    /* Script arguments borrow the argv strings owned by the C runtime. */
     int script_argument_count;
     char **script_arguments;
     char *runtime_strings[NEWT_MAX_RUNTIME_STRINGS];
@@ -1832,6 +1835,7 @@ static int make_runtime_string(Interpreter *interpreter,
                                Value *value) {
     Token string = source;
 
+    /* The interpreter owns this heap buffer and frees it after the run. */
     if (interpreter->runtime_string_count >= NEWT_MAX_RUNTIME_STRINGS) {
         free(characters);
         runtime_error(interpreter, source, "too many runtime strings");
@@ -2408,7 +2412,11 @@ static int call_file_read(Interpreter *interpreter, Expr *call, Value *value) {
 
     file = fopen(path, "rb");
     if (file == NULL) {
-        snprintf(message, sizeof(message), "file_read could not open '%s'", path);
+        snprintf(message,
+                 sizeof(message),
+                 "file_read could not open file '%s': %s",
+                 path,
+                 strerror(errno));
         runtime_error(interpreter, call->token, message);
         return 0;
     }
@@ -2426,6 +2434,7 @@ static int call_file_read(Interpreter *interpreter, Expr *call, Value *value) {
     }
     rewind(file);
 
+    /* Read the whole file into one heap buffer. make_runtime_string owns it. */
     characters = malloc((size_t)file_size + 3);
     if (characters == NULL) {
         fclose(file);
@@ -2506,7 +2515,12 @@ static int call_file_write(Interpreter *interpreter,
 
     file = fopen(path, mode);
     if (file == NULL) {
-        snprintf(message, sizeof(message), "%s could not open '%s'", name, path);
+        snprintf(message,
+                 sizeof(message),
+                 "%s could not open file '%s': %s",
+                 name,
+                 path,
+                 strerror(errno));
         runtime_error(interpreter, call->token, message);
         return 0;
     }
@@ -2857,17 +2871,6 @@ static int run_program(const char *path,
     }
 }
 
-static void print_source(const char *source) {
-    fputs(source, stdout);
-
-    if (source[0] != '\0') {
-        size_t length = strlen(source);
-        if (source[length - 1] != '\n') {
-            putchar('\n');
-        }
-    }
-}
-
 int main(int argc, char **argv) {
     int print_token_mode = 0;
     int parse_mode = 0;
@@ -2929,7 +2932,10 @@ int main(int argc, char **argv) {
         script_argument_count = argc - 3;
         script_arguments = argv + 3;
     } else {
+        run_mode = 1;
         path = argv[1];
+        script_argument_count = argc - 2;
+        script_arguments = argv + 2;
     }
 
     char *source = read_file(path);
@@ -2946,8 +2952,6 @@ int main(int argc, char **argv) {
                               source,
                               script_argument_count,
                               script_arguments);
-    } else {
-        print_source(source);
     }
 
     free(source);

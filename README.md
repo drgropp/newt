@@ -12,6 +12,12 @@ Newt currently builds with GCC:
 gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c
 ```
 
+Or use the small Makefile:
+
+```sh
+make
+```
+
 On Windows, GCC must be installed and available on `PATH`.
 
 Check the version:
@@ -28,7 +34,13 @@ newt 0.1.0
 
 ## Run a file
 
-Use `--run` to execute a `.nt` source file:
+Pass a `.nt` source file directly to execute it:
+
+```sh
+./newt.exe examples/calculator.nt
+```
+
+The explicit `--run` form is still supported:
 
 ```sh
 ./newt.exe --run examples/calculator.nt
@@ -39,7 +51,7 @@ Runtime errors include the source file, line, and column. A failed run exits wit
 Pass script arguments after the source file. Newt exposes them through `arg_count()` and zero-based `arg(index)`:
 
 ```sh
-./newt.exe --run examples/args_test.nt hello newt
+./newt.exe examples/args.nt hello world
 ```
 
 Newt also has development modes for inspecting tokens and parse trees:
@@ -54,8 +66,13 @@ Newt also has development modes for inspecting tokens and parse trees:
 Run one example directly:
 
 ```sh
+./newt.exe examples/args.nt hello world
+./newt.exe examples/read_file.nt
+./newt.exe examples/write_file.nt
+./newt.exe examples/append_file.nt
+./newt.exe examples/ghostlog.nt
 ./newt.exe --run examples/args_test.nt hello newt
-./newt.exe --run examples/ghostlog_args.nt StraySignal "alchemy station"
+./newt.exe --run examples/ghostlog_args.nt GardenGame "alchemy station"
 ./newt.exe --run examples/file_read_test.nt
 ./newt.exe --run examples/file_write_test.nt
 ./newt.exe --run examples/file_append_test.nt
@@ -80,7 +97,11 @@ On Windows, rebuild and run the main examples together with:
 test_newt.bat
 ```
 
-The script stops immediately if the build or any example fails.
+The script stops immediately if the build or any example fails. On platforms with Make, the portable utility-example check is:
+
+```sh
+make test
+```
 
 ## Supported language features
 
@@ -206,10 +227,12 @@ file_append("notes.txt", "\nsecond line")
 
 `file_read` returns the complete file text. `file_write` overwrites a file and `file_append` adds to it; both return `true` after a successful write.
 
+File I/O is early and intentionally simple. Paths are local paths interpreted by the operating system, parent directories are not created automatically, and `file_read` loads the complete file into memory. Newt reports open, allocation, read, write, type, and argument-count failures instead of continuing with an invalid value.
+
 Command-line arguments:
 
 ```sh
-./newt.exe --run examples/ghostlog_args.nt StraySignal "alchemy station"
+./newt.exe examples/args.nt GardenGame "alchemy station"
 ```
 
 ```newt
@@ -220,10 +243,22 @@ print arg(1)
 
 `arg_count()` returns the number of values after the script path. `arg(0)` returns the first value, and an invalid index produces a runtime error.
 
+Generate a small Markdown development log:
+
+```newt
+file_write("examples/devlog.md", "# Devlog\n\n")
+file_append("examples/devlog.md", "Today I worked on Newt.\n")
+```
+
 Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
 
 ## Main examples
 
+- `args.nt` demonstrates direct command-line arguments.
+- `read_file.nt` demonstrates reading a complete text file.
+- `write_file.nt` demonstrates overwriting a text file.
+- `append_file.nt` demonstrates deterministic append behavior.
+- `ghostlog.nt` generates a small Markdown development log.
 - `args_test.nt` demonstrates counting and reading script arguments.
 - `ghostlog_args.nt` demonstrates passing a quoted argument containing a space.
 - `file_read_test.nt` demonstrates reading a complete text file.
@@ -264,6 +299,10 @@ newt/
 ## Status
 
 Newt is experimental, and still in an early stage. Newt is currently being worked on and will continue to have updates.
+
+## GhostNote integration roadmap
+
+This milestone provides the first useful bridge: a Newt script can receive project or note information through command-line arguments and produce local Markdown with the file built-ins. The next safe steps are basic text helpers, a stable process exit status, and then a small GhostNote-facing command contract. Imports, HTTP, and JSON remain later milestones.
 
 ## License
 

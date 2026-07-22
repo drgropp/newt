@@ -1,0 +1,4 @@
+# Write and read back a text file
+
+file_write("examples/write_output.txt", "hello from Newt")
+print file_read("examples/write_output.txt")
