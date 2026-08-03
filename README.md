@@ -71,6 +71,7 @@ Run one example directly:
 ./newt.exe examples/write_file.nt
 ./newt.exe examples/append_file.nt
 ./newt.exe examples/ghostlog.nt
+./newt.exe examples/escape_sequences.nt
 ./newt.exe --run examples/args_test.nt hello newt
 ./newt.exe --run examples/ghostlog_args.nt GardenGame "alchemy station"
 ./newt.exe --run examples/file_read_test.nt
@@ -122,6 +123,7 @@ Newt currently supports:
 - numeric input with `input_number("prompt")`
 - arithmetic with `+`, `-`, `*`, and `/`
 - string concatenation with `+`
+- string escapes `\n`, `\t`, `\r`, `\\`, and `\"`
 - comparisons with `==`, `!=`, `<`, `<=`, `>`, and `>=`
 - boolean `and`
 - boolean `or`
@@ -167,6 +169,16 @@ else
     print "needs help"
 end
 ```
+
+String literals decode `\n` as newline, `\t` as tab, `\r` as carriage return, `\\` as one backslash, and `\"` as one double quote:
+
+```newt
+print "Name:\tNewt\nStatus:\tready"
+print "She said \"hello\"."
+print "C:\\notes"
+```
+
+Any other backslash sequence is a lexer error. A backslash at the end of an unterminated string is reported as an incomplete escape sequence, with the diagnostic located at that backslash.
 
 Boolean `or`, boolean `not`, and negative numbers:
 
@@ -285,6 +297,7 @@ Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
 - `write_file.nt` demonstrates overwriting a text file.
 - `append_file.nt` demonstrates deterministic append behavior.
 - `ghostlog.nt` generates a small Markdown development log.
+- `escape_sequences.nt` demonstrates newline and tab escapes.
 - `args_test.nt` demonstrates counting and reading script arguments.
 - `ghostlog_args.nt` demonstrates passing a quoted argument containing a space.
 - `file_read_test.nt` demonstrates reading a complete text file.

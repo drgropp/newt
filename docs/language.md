@@ -67,6 +67,18 @@ if hungry and not sleeping
 end
 ```
 
+## Strings and escapes
+
+Strings are enclosed in double quotes. Use `\n` for newline, `\t` for tab, `\r` for carriage return, `\\` for a literal backslash, and `\"` for a literal double quote.
+
+```newt
+print "Name:\tNewt\nStatus:\tready"
+print "She said \"hello\"."
+print "C:\\notes"
+```
+
+Only those five escapes are valid. An unsupported escape or a backslash left at the end of an unterminated string is a lexer error reported at the backslash.
+
 ## Math
 
 Newt supports `+`, `-`, `*`, `/`, comparisons, negative numbers, and grouped expressions. `+` also concatenates two strings.

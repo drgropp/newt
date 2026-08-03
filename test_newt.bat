@@ -27,6 +27,10 @@ echo [ghostlog.nt - direct invocation]
 .\newt.exe examples/ghostlog.nt
 if errorlevel 1 exit /b 1
 
+echo [escape_sequences.nt - direct invocation]
+.\newt.exe examples/escape_sequences.nt
+if errorlevel 1 exit /b 1
+
 echo [args_test.nt]
 .\newt.exe --run examples/args_test.nt hello newt
 if errorlevel 1 exit /b 1

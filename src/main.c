@@ -210,6 +210,20 @@ static Token make_error_token(Lexer *lexer, const char *message) {
     return token;
 }
 
+static Token make_error_token_at(Lexer *lexer,
+                                 const char *start,
+                                 int line,
+                                 int column,
+                                 const char *message) {
+    Token token = make_error_token(lexer, message);
+
+    token.start = start;
+    token.length = (int)(lexer->current - start);
+    token.line = line;
+    token.column = column;
+    return token;
+}
+
 static void lexer_mark_start(Lexer *lexer) {
     lexer->start = lexer->current;
     lexer->start_line = lexer->line;
@@ -305,21 +319,70 @@ static Token lex_number(Lexer *lexer) {
     return make_token(lexer, TOKEN_NUMBER);
 }
 
-static Token lex_string(Lexer *lexer) {
-    while (lexer_peek(lexer) != '"' &&
-           lexer_peek(lexer) != '\n' &&
-           !lexer_is_at_end(lexer)) {
-        if (lexer_peek(lexer) == '\\' &&
-            lexer_peek_next(lexer) != '\0' &&
-            lexer_peek_next(lexer) != '\n') {
-            lexer_advance(lexer);
-        }
-        lexer_advance(lexer);
-    }
+static int string_escape_is_supported(char escaped) {
+    return escaped == 'n' ||
+           escaped == 'r' ||
+           escaped == 't' ||
+           escaped == '\\' ||
+           escaped == '"';
+}
 
-    if (lexer_peek(lexer) == '"') {
+static char decode_string_escape(char escaped) {
+    switch (escaped) {
+        case 'n':
+            return '\n';
+        case 'r':
+            return '\r';
+        case 't':
+            return '\t';
+        case '\\':
+            return '\\';
+        case '"':
+            return '"';
+        default:
+            return escaped;
+    }
+}
+
+static Token lex_string(Lexer *lexer) {
+    while (!lexer_is_at_end(lexer)) {
+        char ch = lexer_peek(lexer);
+
+        if (ch == '"') {
+            lexer_advance(lexer);
+            return make_token(lexer, TOKEN_STRING);
+        }
+        if (ch == '\n' || ch == '\r') {
+            return make_error_token(lexer, "unterminated string");
+        }
+        if (ch == '\\') {
+            const char *escape_start = lexer->current;
+            int escape_line = lexer->line;
+            int escape_column = lexer->column;
+
+            lexer_advance(lexer);
+            if (lexer_is_at_end(lexer) ||
+                lexer_peek(lexer) == '\n' ||
+                lexer_peek(lexer) == '\r') {
+                return make_error_token_at(lexer,
+                                           escape_start,
+                                           escape_line,
+                                           escape_column,
+                                           "incomplete escape sequence");
+            }
+
+            ch = lexer_advance(lexer);
+            if (!string_escape_is_supported(ch)) {
+                return make_error_token_at(lexer,
+                                           escape_start,
+                                           escape_line,
+                                           escape_column,
+                                           "invalid escape sequence");
+            }
+            continue;
+        }
+
         lexer_advance(lexer);
-        return make_token(lexer, TOKEN_STRING);
     }
 
     return make_error_token(lexer, "unterminated string");
@@ -509,6 +572,18 @@ static void print_token(Token token) {
 }
 
 static void print_lexer_error(const char *path, Token token) {
+    if (token.length == 2 && token.error_message != NULL &&
+        strcmp(token.error_message, "invalid escape sequence") == 0) {
+        fprintf(stderr,
+                "%s:%d:%d: lexer error: %s '\\%c'\n",
+                path,
+                token.line,
+                token.column,
+                token.error_message,
+                token.start[1]);
+        return;
+    }
+
     if (token.length == 1 && token.error_message != NULL &&
         strcmp(token.error_message, "unknown character") == 0) {
         fprintf(stderr,
@@ -1863,6 +1938,11 @@ static int make_runtime_string(Interpreter *interpreter,
     Token string = source;
 
     /* The interpreter owns this heap buffer and frees it after the run. */
+    if (content_length < 0 || content_length > INT_MAX - 2) {
+        free(characters);
+        runtime_error(interpreter, source, "runtime string is too long");
+        return 0;
+    }
     if (interpreter->runtime_string_count >= NEWT_MAX_RUNTIME_STRINGS) {
         free(characters);
         runtime_error(interpreter, source, "too many runtime strings");
@@ -1929,6 +2009,11 @@ static int eval_string_literal(Interpreter *interpreter, Token token, Value *val
     int output_index = 1;
     int has_escape = 0;
 
+    if (token.length < 2) {
+        runtime_error(interpreter, token, "invalid string token");
+        return 0;
+    }
+
     for (input_index = 1; input_index < token.length - 1; input_index++) {
         if (token.start[input_index] == '\\') {
             has_escape = 1;
@@ -1950,29 +2035,23 @@ static int eval_string_literal(Interpreter *interpreter, Token token, Value *val
     for (input_index = 1; input_index < token.length - 1; input_index++) {
         char ch = token.start[input_index];
 
-        if (ch == '\\' && input_index + 1 < token.length - 1) {
-            char escaped = token.start[input_index + 1];
+        if (ch == '\\') {
+            char escaped;
 
-            if (escaped == 'n') {
-                characters[output_index++] = '\n';
-                input_index++;
-                continue;
+            if (input_index + 1 >= token.length - 1) {
+                free(characters);
+                runtime_error(interpreter, token, "incomplete escape sequence in string");
+                return 0;
             }
-            if (escaped == 'r') {
-                characters[output_index++] = '\r';
-                input_index++;
-                continue;
+            escaped = token.start[++input_index];
+            if (!string_escape_is_supported(escaped)) {
+                free(characters);
+                runtime_error(interpreter, token, "invalid escape sequence in string");
+                return 0;
             }
-            if (escaped == 't') {
-                characters[output_index++] = '\t';
-                input_index++;
-                continue;
-            }
-            if (escaped == '\\' || escaped == '"') {
-                characters[output_index++] = escaped;
-                input_index++;
-                continue;
-            }
+
+            characters[output_index++] = decode_string_escape(escaped);
+            continue;
         }
 
         characters[output_index++] = ch;
@@ -2064,8 +2143,15 @@ static int read_number_token(Interpreter *interpreter, Token token, double *numb
 }
 
 static int read_input_number(Interpreter *interpreter, Token prompt, double *number) {
-    if (prompt.length >= 2) {
-        printf("%.*s", prompt.length - 2, prompt.start + 1);
+    Value decoded_prompt;
+
+    if (!eval_string_literal(interpreter, prompt, &decoded_prompt)) {
+        return 0;
+    }
+    if (decoded_prompt.string.length >= 2) {
+        printf("%.*s",
+               decoded_prompt.string.length - 2,
+               decoded_prompt.string.start + 1);
     }
     fflush(stdout);
 

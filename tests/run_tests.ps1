@@ -30,6 +30,62 @@ $Tests = @(
         Stderr = ""
     },
     @{
+        Name = "newline escape"
+        Arguments = "tests/cases/escape_newline.nt"
+        ExitCode = 0
+        Stdout = "first`nsecond`n"
+        Stderr = ""
+    },
+    @{
+        Name = "tab escape"
+        Arguments = "tests/cases/escape_tab.nt"
+        ExitCode = 0
+        Stdout = "left`tright`n"
+        Stderr = ""
+    },
+    @{
+        Name = "carriage-return escape"
+        Arguments = "tests/cases/escape_carriage_return.nt"
+        ExitCode = 0
+        Stdout = "left`rright`n"
+        Stderr = ""
+    },
+    @{
+        Name = "escaped quote"
+        Arguments = "tests/cases/escape_quote.nt"
+        ExitCode = 0
+        Stdout = "She said `"Newt`".`n"
+        Stderr = ""
+    },
+    @{
+        Name = "escaped backslash"
+        Arguments = "tests/cases/escape_backslash.nt"
+        ExitCode = 0
+        Stdout = "C:\Newt`n\n`n"
+        Stderr = ""
+    },
+    @{
+        Name = "multiple escapes"
+        Arguments = "tests/cases/escape_multiple.nt"
+        ExitCode = 0
+        Stdout = "row1`n`t`"Newt`"\done`n"
+        Stderr = ""
+    },
+    @{
+        Name = "invalid escape"
+        Arguments = "--tokens tests/cases/bad_escape.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_escape.nt:1:5: lexer error: invalid escape sequence '\q'`n"
+    },
+    @{
+        Name = "trailing backslash escape"
+        Arguments = "--tokens tests/cases/bad_escape_trailing.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_escape_trailing.nt:1:5: lexer error: incomplete escape sequence`n"
+    },
+    @{
         Name = "text conversions"
         Arguments = "tests/cases/text_values.nt"
         ExitCode = 0

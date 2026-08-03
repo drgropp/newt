@@ -32,7 +32,15 @@ Newt currently has three value types:
 
 Newt does not currently have a `none` or null value. A function call used as a value returns the number `0` if the function completes without an explicit `return`.
 
-Strings support `\n`, `\r`, `\t`, `\\`, and `\"` escapes. Other backslash sequences are preserved literally.
+Strings support exactly these escape sequences:
+
+- `\n` produces a newline;
+- `\t` produces a horizontal tab;
+- `\r` produces a carriage return;
+- `\\` produces one backslash;
+- `\"` produces one double quote.
+
+Escape pairs remain in their original spelling in lexer tokens and parse-tree output. They are decoded once when the string literal is evaluated. An unsupported escape is a lexer error at the backslash. A backslash followed by the end of the file or a source line ending is an incomplete escape sequence and is also reported at the backslash. Raw source line endings are not allowed inside a string.
 
 ## Variables
 
