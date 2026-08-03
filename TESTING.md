@@ -81,6 +81,9 @@ The focused suite currently checks:
 
 - an existing positive example;
 - string concatenation;
+- each supported string escape: `\n`, `\t`, `\r`, `\\`, and `\"`;
+- multiple escapes in one string;
+- invalid and incomplete escape diagnostics with source columns;
 - `text(value)` for numbers, booleans, and strings;
 - `break` exiting the nearest loop, including nested loops;
 - `break` in parse-tree output;
