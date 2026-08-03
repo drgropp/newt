@@ -1,0 +1,6 @@
+print text(42)
+print text(3.5)
+print text(true)
+print text(false)
+print text("newt")
+print "value=" + text(7)

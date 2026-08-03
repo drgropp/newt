@@ -45,9 +45,14 @@ mut count = 1
 
 while count <= 3
     print count
+    if count == 2
+        break
+    end
     count = count + 1
 end
 ```
+
+`break` exits the nearest enclosing `while`. In nested loops, it exits only the innermost loop. A function cannot use `break` to exit a loop in its caller; the function must be running its own loop. Using `break` outside a loop in the current function call is a runtime error.
 
 ## Booleans
 
@@ -64,13 +69,16 @@ end
 
 ## Math
 
-Newt supports `+`, `-`, `*`, `/`, comparisons, negative numbers, and grouped expressions.
+Newt supports `+`, `-`, `*`, `/`, comparisons, negative numbers, and grouped expressions. `+` also concatenates two strings.
 
 ```newt
 val total = (4 + 6) * 2
 print -total
 print total >= 10
+print "total: " + text(total)
 ```
+
+`text(value)` explicitly converts a number or boolean to a string and leaves a string unchanged. Newt does not implicitly combine strings and numbers.
 
 Use `sqrt` for the square root of a non-negative number.
 

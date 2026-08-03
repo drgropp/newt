@@ -100,19 +100,19 @@ static char *read_file(const char *path) {
     FILE *file = fopen(path, "rb");
 
     if (file == NULL) {
-        printf("error: could not open %s\n", path);
+        fprintf(stderr, "error: could not open %s\n", path);
         return NULL;
     }
 
     if (fseek(file, 0, SEEK_END) != 0) {
-        printf("error: could not read %s\n", path);
+        fprintf(stderr, "error: could not read %s\n", path);
         fclose(file);
         return NULL;
     }
 
     long file_size = ftell(file);
     if (file_size < 0) {
-        printf("error: could not read %s\n", path);
+        fprintf(stderr, "error: could not read %s\n", path);
         fclose(file);
         return NULL;
     }
@@ -121,7 +121,7 @@ static char *read_file(const char *path) {
 
     char *source = malloc((size_t)file_size + 1);
     if (source == NULL) {
-        printf("error: not enough memory to read %s\n", path);
+        fprintf(stderr, "error: not enough memory to read %s\n", path);
         fclose(file);
         return NULL;
     }
@@ -130,7 +130,7 @@ static char *read_file(const char *path) {
     source[bytes_read] = '\0';
 
     if (bytes_read != (size_t)file_size && ferror(file)) {
-        printf("error: could not read %s\n", path);
+        fprintf(stderr, "error: could not read %s\n", path);
         free(source);
         fclose(file);
         return NULL;
@@ -189,7 +189,7 @@ static int lexer_match(Lexer *lexer, char expected) {
         return 0;
     }
 
-   lexer_advance(lexer);
+lexer_advance(lexer);
 return 1;
 }
 
@@ -511,23 +511,25 @@ static void print_token(Token token) {
 static void print_lexer_error(const char *path, Token token) {
     if (token.length == 1 && token.error_message != NULL &&
         strcmp(token.error_message, "unknown character") == 0) {
-        printf("%s:%d:%d: lexer error: %s '%c'\n",
-               path,
-               token.line,
-               token.column,
-               token.error_message,
-               token.start[0]);
+        fprintf(stderr,
+                "%s:%d:%d: lexer error: %s '%c'\n",
+                path,
+                token.line,
+                token.column,
+                token.error_message,
+                token.start[0]);
         return;
     }
 
-    printf("%s:%d:%d: lexer error: %s\n",
-           path,
-           token.line,
-           token.column,
-           token.error_message);
+    fprintf(stderr,
+            "%s:%d:%d: lexer error: %s\n",
+            path,
+            token.line,
+            token.column,
+            token.error_message);
 }
 
-static void print_tokens(const char *path, const char *source) {
+static int print_tokens(const char *path, const char *source) {
     Lexer lexer;
     lexer_init(&lexer, source);
 
@@ -536,13 +538,13 @@ static void print_tokens(const char *path, const char *source) {
 
         if (token.type == TOKEN_ERROR) {
             print_lexer_error(path, token);
-            break;
+            return 0;
         }
 
         print_token(token);
 
         if (token.type == TOKEN_EOF) {
-            break;
+            return 1;
         }
     }
 }
@@ -568,6 +570,7 @@ typedef enum {
     STMT_FN_DECL,
     STMT_CALL,
     STMT_RETURN,
+    STMT_BREAK,
     STMT_ASSIGN,
     STMT_IF,
     STMT_WHILE,
@@ -639,11 +642,12 @@ static void parser_error(Parser *parser, Token token, const char *message) {
         return;
     }
 
-    printf("%s:%d:%d: parse error: %s\n",
-           parser->path,
-           token.line,
-           token.column,
-           message);
+    fprintf(stderr,
+            "%s:%d:%d: parse error: %s\n",
+            parser->path,
+            token.line,
+            token.column,
+            message);
     parser->had_error = 1;
 }
 
@@ -1235,6 +1239,17 @@ static Stmt *parse_return_statement(Parser *parser) {
     return new_stmt(parser, STMT_RETURN, return_token, value);
 }
 
+static Stmt *parse_break_statement(Parser *parser) {
+    Token break_token = parser->previous;
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    return new_stmt(parser, STMT_BREAK, break_token, NULL);
+}
+
 static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int statements[256], int *count) {
     *count = 0;
     parser_skip_newlines(parser);
@@ -1511,6 +1526,10 @@ static Stmt *parse_statement(Parser *parser) {
         return parse_return_statement(parser);
     }
 
+    if (parser_match(parser, TOKEN_BREAK)) {
+        return parse_break_statement(parser);
+    }
+
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
     }
@@ -1578,6 +1597,10 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             printf("RETURN\n");
             print_expression_tree(parser, stmt->expression, indent + 2);
             break;
+        case STMT_BREAK:
+            print_indent(indent);
+            printf("BREAK\n");
+            break;
         case STMT_ASSIGN:
             print_indent(indent);
             printf("ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
@@ -1644,13 +1667,13 @@ static int parse_program(Parser *parser) {
     return !parser->had_error;
 }
 
-static void print_parse_tree(const char *path, const char *source) {
+static int print_parse_tree(const char *path, const char *source) {
     Parser parser;
     int i;
 
     parser_init(&parser, path, source);
     if (!parse_program(&parser)) {
-        return;
+        return 0;
     }
 
     printf("PROGRAM\n");
@@ -1659,6 +1682,7 @@ static void print_parse_tree(const char *path, const char *source) {
         print_statement_tree(&parser, &parser.statements[stmt_index], 2);
     }
     printf("EOF\n");
+    return 1;
 }
 
 typedef enum {
@@ -1695,6 +1719,8 @@ typedef struct {
     int call_depth;
     int scope_depth;
     int is_returning;
+    int is_breaking;
+    int loop_depth;
     Value return_value;
     /* Script arguments borrow the argv strings owned by the C runtime. */
     int script_argument_count;
@@ -1792,11 +1818,12 @@ static void runtime_error(Interpreter *interpreter, Token token, const char *mes
         return;
     }
 
-    printf("%s:%d:%d: runtime error: %s\n",
-           interpreter->parser->path,
-           token.line,
-           token.column,
-           message);
+    fprintf(stderr,
+            "%s:%d:%d: runtime error: %s\n",
+            interpreter->parser->path,
+            token.line,
+            token.column,
+            message);
     interpreter->had_error = 1;
 }
 
@@ -1852,6 +1879,48 @@ static int make_runtime_string(Interpreter *interpreter,
         *value = make_string_value(string);
     }
     return 1;
+}
+
+static int concatenate_strings(Interpreter *interpreter,
+                               Token operator_token,
+                               Value left,
+                               Value right,
+                               Value *value) {
+    int left_length = left.string.length - 2;
+    int right_length = right.string.length - 2;
+    int content_length;
+    char *characters;
+
+    if (left_length < 0) {
+        left_length = 0;
+    }
+    if (right_length < 0) {
+        right_length = 0;
+    }
+    if (left_length > INT_MAX - right_length - 2) {
+        runtime_error(interpreter, operator_token, "concatenated string is too long");
+        return 0;
+    }
+
+    content_length = left_length + right_length;
+    characters = malloc((size_t)content_length + 3);
+    if (characters == NULL) {
+        runtime_error(interpreter, operator_token, "not enough memory to concatenate strings");
+        return 0;
+    }
+
+    characters[0] = '"';
+    memcpy(characters + 1, left.string.start + 1, (size_t)left_length);
+    memcpy(characters + 1 + left_length,
+           right.string.start + 1,
+           (size_t)right_length);
+    characters[content_length + 1] = '"';
+    characters[content_length + 2] = '\0';
+    return make_runtime_string(interpreter,
+                               operator_token,
+                               characters,
+                               content_length,
+                               value);
 }
 
 static int eval_string_literal(Interpreter *interpreter, Token token, Value *value) {
@@ -2188,6 +2257,16 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     break;
             }
 
+            if (expr->token.type == TOKEN_PLUS &&
+                left.type == VALUE_STRING &&
+                right.type == VALUE_STRING) {
+                return concatenate_strings(interpreter,
+                                           expr->token,
+                                           left,
+                                           right,
+                                           value);
+            }
+
             if (left.type != VALUE_NUMBER || right.type != VALUE_NUMBER) {
                 if (left.type == VALUE_BOOL || right.type == VALUE_BOOL) {
                     runtime_error(interpreter, expr->token, "numeric operators require numbers, not booleans");
@@ -2324,7 +2403,10 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
     int i;
 
     for (i = 0;
-         i < count && !interpreter->had_error && !interpreter->is_returning;
+         i < count &&
+         !interpreter->had_error &&
+         !interpreter->is_returning &&
+         !interpreter->is_breaking;
          i++) {
         int stmt_index = statements[i];
         if (!execute_statement(interpreter, &interpreter->parser->statements[stmt_index])) {
@@ -2629,6 +2711,70 @@ static int call_arg(Interpreter *interpreter, Expr *call, Value *value) {
                                value);
 }
 
+static int call_text(Interpreter *interpreter, Expr *call, Value *value) {
+    Expr *argument_expression;
+    Value argument_value;
+    char content[64];
+    int content_length;
+    char *characters;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+
+    argument_expression = interpreter->parser->call_arguments[call->argument_start];
+    if (!eval_expression(interpreter, argument_expression, &argument_value)) {
+        return 0;
+    }
+
+    if (value == NULL) {
+        return 1;
+    }
+    if (argument_value.type == VALUE_STRING) {
+        *value = argument_value;
+        return 1;
+    }
+    if (argument_value.type == VALUE_BOOL) {
+        content_length = snprintf(content,
+                                  sizeof(content),
+                                  "%s",
+                                  argument_value.boolean ? "true" : "false");
+    } else if (isfinite(argument_value.number) &&
+               argument_value.number >= (double)LLONG_MIN &&
+               argument_value.number < 9223372036854775808.0 &&
+               floor(argument_value.number) == argument_value.number) {
+        content_length = snprintf(content,
+                                  sizeof(content),
+                                  "%lld",
+                                  (long long)argument_value.number);
+    } else {
+        content_length = snprintf(content,
+                                  sizeof(content),
+                                  "%g",
+                                  argument_value.number);
+    }
+
+    if (content_length < 0 || content_length >= (int)sizeof(content)) {
+        runtime_error(interpreter, call->token, "could not convert value to text");
+        return 0;
+    }
+
+    characters = malloc((size_t)content_length + 3);
+    if (characters == NULL) {
+        runtime_error(interpreter, call->token, "not enough memory to convert value to text");
+        return 0;
+    }
+    characters[0] = '"';
+    memcpy(characters + 1, content, (size_t)content_length);
+    characters[content_length + 1] = '"';
+    characters[content_length + 2] = '\0';
+    return make_runtime_string(interpreter,
+                               call->token,
+                               characters,
+                               content_length,
+                               value);
+}
+
 static int call_function(Interpreter *interpreter,
                          Expr *call,
                          Value *value) {
@@ -2637,6 +2783,8 @@ static int call_function(Interpreter *interpreter,
     Value returned_value = make_number_value(0);
     Value previous_return_value = interpreter->return_value;
     int previous_returning = interpreter->is_returning;
+    int previous_breaking = interpreter->is_breaking;
+    int previous_loop_depth = interpreter->loop_depth;
     int variable_start = interpreter->variable_count;
     int succeeded = 1;
     int did_return;
@@ -2656,6 +2804,9 @@ static int call_function(Interpreter *interpreter,
     }
     if (token_text_equals(call->token, "file_append")) {
         return call_file_write(interpreter, call, "ab", "file_append", value);
+    }
+    if (token_text_equals(call->token, "text")) {
+        return call_text(interpreter, call, value);
     }
 
     function = find_function(interpreter, call->token);
@@ -2688,6 +2839,8 @@ static int call_function(Interpreter *interpreter,
     interpreter->call_depth++;
     interpreter->scope_depth++;
     interpreter->is_returning = 0;
+    interpreter->is_breaking = 0;
+    interpreter->loop_depth = 0;
 
     for (i = 0; i < function->declaration->parameter_count; i++) {
         Token parameter = interpreter->parser->parameters[
@@ -2713,6 +2866,8 @@ static int call_function(Interpreter *interpreter,
     interpreter->scope_depth--;
     interpreter->call_depth--;
     interpreter->is_returning = previous_returning;
+    interpreter->is_breaking = previous_breaking;
+    interpreter->loop_depth = previous_loop_depth;
     interpreter->return_value = previous_return_value;
 
     if (!succeeded) {
@@ -2749,6 +2904,15 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             }
             interpreter->return_value = value;
             interpreter->is_returning = 1;
+            return 1;
+        case STMT_BREAK:
+            if (interpreter->loop_depth == 0) {
+                runtime_error(interpreter,
+                              stmt->name,
+                              "break can only be used inside a loop");
+                return 0;
+            }
+            interpreter->is_breaking = 1;
             return 1;
         case STMT_VAL_DECL:
             if (!eval_expression(interpreter, stmt->expression, &value)) {
@@ -2801,31 +2965,41 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
         }
         case STMT_WHILE: {
             int iterations = 0;
+            int succeeded = 1;
 
+            interpreter->loop_depth++;
             while (!interpreter->had_error) {
                 if (iterations >= NEWT_MAX_WHILE_ITERATIONS) {
                     runtime_error(interpreter, stmt->name, "while loop exceeded max iteration limit");
-                    return 0;
+                    succeeded = 0;
+                    break;
                 }
 
                 if (!eval_expression(interpreter, stmt->expression, &value)) {
-                    return 0;
+                    succeeded = 0;
+                    break;
                 }
 
                 if (!value_is_truthy(value)) {
-                    return 1;
+                    break;
                 }
 
                 iterations++;
                 if (!execute_statement_list(interpreter, stmt->body_statements, stmt->body_count)) {
-                    return 0;
+                    succeeded = 0;
+                    break;
                 }
                 if (interpreter->is_returning) {
-                    return 1;
+                    break;
+                }
+                if (interpreter->is_breaking) {
+                    interpreter->is_breaking = 0;
+                    break;
                 }
             }
 
-            return 0;
+            interpreter->loop_depth--;
+            return succeeded && !interpreter->had_error;
         }
     }
 
@@ -2850,6 +3024,8 @@ static int run_program(const char *path,
     interpreter.call_depth = 0;
     interpreter.scope_depth = 0;
     interpreter.is_returning = 0;
+    interpreter.is_breaking = 0;
+    interpreter.loop_depth = 0;
     interpreter.return_value = make_number_value(0);
     interpreter.script_argument_count = script_argument_count;
     interpreter.script_arguments = script_arguments;
@@ -2881,8 +3057,8 @@ int main(int argc, char **argv) {
     const char *path = NULL;
 
     if (argc < 2) {
-        printf("error: missing input file\n");
-        printf("usage: newt <file.nt>\n");
+        fprintf(stderr, "error: missing input file\n");
+        fprintf(stderr, "usage: newt <file.nt>\n");
         return 1;
     }
 
@@ -2904,8 +3080,8 @@ int main(int argc, char **argv) {
 
     if (strcmp(argv[1], "--tokens") == 0) {
         if (argc < 3) {
-            printf("error: missing input file\n");
-            printf("usage: newt --tokens <file.nt>\n");
+            fprintf(stderr, "error: missing input file\n");
+            fprintf(stderr, "usage: newt --tokens <file.nt>\n");
             return 1;
         }
 
@@ -2913,8 +3089,8 @@ int main(int argc, char **argv) {
         path = argv[2];
     } else if (strcmp(argv[1], "--parse") == 0) {
         if (argc < 3) {
-            printf("error: missing input file\n");
-            printf("usage: newt --parse <file.nt>\n");
+            fprintf(stderr, "error: missing input file\n");
+            fprintf(stderr, "usage: newt --parse <file.nt>\n");
             return 1;
         }
 
@@ -2922,8 +3098,8 @@ int main(int argc, char **argv) {
         path = argv[2];
     } else if (strcmp(argv[1], "--run") == 0) {
         if (argc < 3) {
-            printf("error: missing input file\n");
-            printf("usage: newt --run <file.nt> [args...]\n");
+            fprintf(stderr, "error: missing input file\n");
+            fprintf(stderr, "usage: newt --run <file.nt> [args...]\n");
             return 1;
         }
 
@@ -2944,9 +3120,9 @@ int main(int argc, char **argv) {
     }
 
     if (print_token_mode) {
-        print_tokens(path, source);
+        success = print_tokens(path, source);
     } else if (parse_mode) {
-        print_parse_tree(path, source);
+        success = print_parse_tree(path, source);
     } else if (run_mode) {
         success = run_program(path,
                               source,

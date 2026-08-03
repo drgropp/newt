@@ -1,0 +1,12 @@
+mut count = 0
+
+while true
+    count = count + 1
+    print count
+
+    if count == 3
+        break
+    end
+end
+
+print "done"

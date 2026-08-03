@@ -46,7 +46,7 @@ The explicit `--run` form is still supported:
 ./newt.exe --run examples/calculator.nt
 ```
 
-Runtime errors include the source file, line, and column. A failed run exits with a nonzero status.
+File-loading, lexer, parser, runtime, and command-line errors are written to standard error and exit with a nonzero status. Normal program output, token output, parse trees, help, and version information are written to standard output. Source diagnostics include the file, line, and column when that location is available.
 
 Pass script arguments after the source file. Newt exposes them through `arg_count()` and zero-based `arg(index)`:
 
@@ -103,6 +103,14 @@ The script stops immediately if the build or any example fails. On platforms wit
 make test
 ```
 
+Run the focused stdout, stderr, and exit-code regression suite on Windows with:
+
+```bat
+regression_tests.bat
+```
+
+See [TESTING.md](TESTING.md) for Windows and Unix-like testing instructions.
+
 ## Supported language features
 
 Newt currently supports:
@@ -113,6 +121,7 @@ Newt currently supports:
 - `print`
 - numeric input with `input_number("prompt")`
 - arithmetic with `+`, `-`, `*`, and `/`
+- string concatenation with `+`
 - comparisons with `==`, `!=`, `<`, `<=`, `>`, and `>=`
 - boolean `and`
 - boolean `or`
@@ -120,8 +129,10 @@ Newt currently supports:
 - unary minus and negative numbers
 - `if / else if / else / end` conditions
 - `while / end` loops
+- `break` to exit the nearest enclosing loop
 - user-defined functions with parameters and return values
 - the built-in `sqrt(number)` function
+- explicit conversion with `text(value)` for numbers, booleans, and strings
 - local file I/O with `file_read`, `file_write`, and `file_append`
 - script arguments with `arg_count()` and `arg(index)`
 - line comments beginning with `#`
@@ -148,9 +159,10 @@ Strings, booleans, and comparisons:
 val player = "Ada"
 val hp = 10
 val food = 5
+val message = "Player: " + player
 
 if hp > 0 and food > 0
-    print player
+    print message
 else
     print "needs help"
 end
@@ -191,9 +203,14 @@ mut count = 1
 
 while count <= 3
     print count
+    if count == 2
+        break
+    end
     count = count + 1
 end
 ```
+
+`break` exits only the nearest enclosing `while`. In nested loops, an inner `break` leaves the inner loop and execution continues in the outer loop. A function call is a control-flow boundary: a `break` inside a function must be inside a loop executing in that same function and cannot exit a loop belonging to its caller. Using `break` without such a loop is a runtime error.
 
 Numeric input and square roots:
 
@@ -214,6 +231,15 @@ print result
 ```
 
 Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters. Because Newt does not have a `none` value yet, a value-producing call to a function without an explicit `return` safely produces the number `0`.
+
+Convert an existing value to text explicitly when building a string:
+
+```newt
+val score = 42
+print "Score: " + text(score)
+```
+
+Newt does not implicitly combine strings and numbers.
 
 Basic file I/O:
 
@@ -284,13 +310,17 @@ Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
 
 ```txt
 newt/
+  .gitattributes
   docs/
     language.md
   examples/
   src/
     main.c
   README.md
+  TESTING.md
+  regression_tests.bat
   test_newt.bat
+  tests/
   build.bat
   SPEC.md
   Makefile
@@ -302,7 +332,7 @@ Newt is experimental, and still in an early stage. Newt is currently being worke
 
 ## GhostNote integration roadmap
 
-This milestone provides the first useful bridge: a Newt script can receive project or note information through command-line arguments and produce local Markdown with the file built-ins. The next safe steps are basic text helpers, a stable process exit status, and then a small GhostNote-facing command contract. Imports, HTTP, and JSON remain later milestones.
+This milestone provides the first useful bridge: a Newt script can receive project or note information through command-line arguments and produce local Markdown with the file built-ins. Basic text conversion and stable diagnostic exit statuses are now covered by regression tests. A small GhostNote-facing command contract remains a possible later milestone. Imports, HTTP, and JSON remain outside the preview scope.
 
 ## License
 

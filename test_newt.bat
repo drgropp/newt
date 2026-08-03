@@ -75,6 +75,10 @@ echo [while_test.nt]
 .\newt.exe --run examples/while_test.nt
 if errorlevel 1 exit /b 1
 
+echo [break_test.nt]
+.\newt.exe --run examples/break_test.nt
+if errorlevel 1 exit /b 1
+
 echo [if_test.nt]
 .\newt.exe --run examples/if_test.nt
 if errorlevel 1 exit /b 1

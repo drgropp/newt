@@ -1,0 +1,7 @@
+fn stop()
+    break
+end
+
+while true
+    stop()
+end
