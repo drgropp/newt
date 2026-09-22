@@ -1,0 +1,5 @@
+print length([])
+
+val items = ["newt", "ghostnote", "stray signal"]
+print length(items)
+print length([[1], [2]])

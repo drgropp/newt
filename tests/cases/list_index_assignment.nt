@@ -1,0 +1,7 @@
+mut items = ["sword", "shield"]
+items[1] = "bow"
+print items[1]
+
+mut rows = [[1, 2], [3, 4]]
+rows[1][0] = 9
+print rows[1][0]

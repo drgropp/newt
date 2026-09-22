@@ -1,0 +1,2 @@
+val items = [10, 20, 30]
+print items["one"]

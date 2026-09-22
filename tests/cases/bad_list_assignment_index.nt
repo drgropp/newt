@@ -1,0 +1,2 @@
+mut items = ["sword", "shield"]
+items[0.5] = "bow"

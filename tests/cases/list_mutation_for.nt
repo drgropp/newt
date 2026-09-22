@@ -1,0 +1,7 @@
+mut items = ["sword", "shield"]
+items[0] = "wand"
+append(items, "bow")
+
+for item in items
+    print item
+end

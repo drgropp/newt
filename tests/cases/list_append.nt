@@ -1,0 +1,6 @@
+mut items = []
+mut alias = items
+append(items, "sword")
+append(alias, "shield")
+print length(items)
+print items[1]

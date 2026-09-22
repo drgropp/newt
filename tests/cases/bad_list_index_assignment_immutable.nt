@@ -1,0 +1,2 @@
+val items = ["sword"]
+items[0] = "bow"
