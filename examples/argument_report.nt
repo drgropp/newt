@@ -1,0 +1,17 @@
+# Write command-line arguments to a small Markdown report.
+
+fn argument_line(index, value)
+    return "- " + text(index + 1) + ": " + value + "\n"
+end
+
+val output_path = "examples/out_note.txt"
+file_write(output_path, "# Argument Report\n\n")
+
+mut index = 0
+while index < arg_count()
+    file_append(output_path, argument_line(index, arg(index)))
+    index = index + 1
+end
+
+file_append(output_path, "\nTotal arguments: " + text(arg_count()) + "\n")
+print "Wrote " + text(arg_count()) + " arguments to " + output_path
