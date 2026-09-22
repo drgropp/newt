@@ -1,0 +1,8 @@
+val names = ["newt", "ghostnote", "stray signal"]
+val name = "outer"
+
+for name in names
+    print name
+end
+
+print name

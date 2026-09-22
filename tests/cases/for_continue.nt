@@ -1,0 +1,6 @@
+for item in [1, 2, 3, 4]
+    if item == 2
+        continue
+    end
+    print item
+end

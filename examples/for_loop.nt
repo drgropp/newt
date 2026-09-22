@@ -1,0 +1,11 @@
+mut names = ["newt", "ghostnote", "stray signal"]
+
+names[1] = "moss"
+append(names, "river")
+
+print names[0]
+print length(names)
+
+for name in names
+    print name
+end

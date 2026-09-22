@@ -1,0 +1,15 @@
+for row in [1, 2]
+    mut column = 0
+    while column < 2
+        column = column + 1
+        print text(row) + ":" + text(column)
+    end
+end
+
+mut pass = 0
+while pass < 2
+    pass = pass + 1
+    for label in ["a", "b"]
+        print text(pass) + label
+    end
+end

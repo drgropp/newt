@@ -1,0 +1,7 @@
+fn skip()
+    continue
+end
+
+while true
+    skip()
+end

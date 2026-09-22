@@ -1,0 +1,18 @@
+mut outer = 0
+mut inner = 0
+
+while outer < 2
+    outer = outer + 1
+    inner = 0
+
+    while inner < 3
+        inner = inner + 1
+        if inner < 3
+            continue
+            print "unreachable inner"
+        end
+        print text(outer) + ":" + text(inner)
+    end
+
+    print "outer"
+end
