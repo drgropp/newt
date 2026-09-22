@@ -2,7 +2,7 @@
 
 Newt is a small experimental scripting language implemented in C. It is designed to be readable, direct, and easy to learn, with simple statements and `end`-delimited blocks.
 
-This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as arrays, imports, modules, HTTP, and JSON are intentionally left for later.
+This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as additional collection operations, imports, modules, HTTP, and JSON are intentionally left for later.
 
 ## Build
 
@@ -72,6 +72,8 @@ Run one example directly:
 ./newt.exe examples/append_file.nt
 ./newt.exe examples/ghostlog.nt
 ./newt.exe examples/escape_sequences.nt
+./newt.exe examples/text_helpers.nt
+./newt.exe examples/math_helpers.nt
 ./newt.exe --run examples/args_test.nt hello newt
 ./newt.exe --run examples/ghostlog_args.nt GardenGame "alchemy station"
 ./newt.exe --run examples/file_read_test.nt
@@ -84,6 +86,8 @@ Run one example directly:
 ./newt.exe --run examples/unary_minus_test.nt
 ./newt.exe --run examples/bool_test.nt
 ./newt.exe --run examples/while_test.nt
+./newt.exe --run examples/continue.nt
+./newt.exe --run examples/for_loop.nt
 ./newt.exe --run examples/if_test.nt
 ./newt.exe --run examples/else_if_test.nt
 ./newt.exe --run examples/function_test.nt
@@ -116,7 +120,11 @@ See [TESTING.md](TESTING.md) for Windows and Unix-like testing instructions.
 
 Newt currently supports:
 
-- numbers, strings, and booleans
+- numbers, strings, booleans, and list literals
+- zero-based list indexing with `items[index]`
+- mutable-list indexed assignment with `items[index] = value`
+- list growth with `append(list, value)`
+- list size with `length(list)`
 - immutable `val` variables
 - mutable `mut` variables and assignment
 - `print`
@@ -124,6 +132,7 @@ Newt currently supports:
 - arithmetic with `+`, `-`, `*`, and `/`
 - string concatenation with `+`
 - string escapes `\n`, `\t`, `\r`, `\\`, and `\"`
+- string helpers with `len`, `contains`, `upper`, `lower`, and `trim`
 - comparisons with `==`, `!=`, `<`, `<=`, `>`, and `>=`
 - boolean `and`
 - boolean `or`
@@ -131,9 +140,14 @@ Newt currently supports:
 - unary minus and negative numbers
 - `if / else if / else / end` conditions
 - `while / end` loops
+- `for name in list / end` loops
 - `break` to exit the nearest enclosing loop
+- `continue` to begin the next iteration of the nearest enclosing loop
 - user-defined functions with parameters and return values
 - the built-in `sqrt(number)` function
+- standard math helpers with `abs`, `floor`, `ceil`, `min`, `max`, and `pow`
+- scientific math with `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `log`, `log10`, `exp`, and `round`
+- immutable `pi` and `e` constants
 - explicit conversion with `text(value)` for numbers, booleans, and strings
 - local file I/O with `file_read`, `file_write`, and `file_append`
 - script arguments with `arg_count()` and `arg(index)`
@@ -222,7 +236,31 @@ while count <= 3
 end
 ```
 
-`break` exits only the nearest enclosing `while`. In nested loops, an inner `break` leaves the inner loop and execution continues in the outer loop. A function call is a control-flow boundary: a `break` inside a function must be inside a loop executing in that same function and cannot exit a loop belonging to its caller. Using `break` without such a loop is a runtime error.
+The condition is evaluated before every iteration. If it is initially false, the loop body does not run.
+
+`break` exits only the nearest enclosing loop. In nested loops, an inner `break` leaves the inner loop and execution continues in the outer loop. A function call is a control-flow boundary: a `break` inside a function must be inside a loop executing in that same function and cannot exit a loop belonging to its caller. Using `break` without such a loop is a runtime error.
+
+`continue` skips the rest of the current iteration of the nearest enclosing loop. A `while` reevaluates its condition, and a `for` advances to the next element. Like `break`, it cannot target a loop in a calling function, and using it outside a loop in the current function call is a runtime error.
+
+Use `for ... in` to visit list elements from first to last. Declare a list with `mut` when its elements or length need to change:
+
+```newt
+mut names = ["newt", "ghostnote", "stray signal"]
+
+names[1] = "moss"
+append(names, "river")
+
+print names[0]
+print length(names)
+
+for name in names
+    print name
+end
+```
+
+List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `val` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
+
+The iterable expression and its starting length are evaluated once before iteration starts. Mutations completed before the loop are visible; appending during a loop does not extend that loop. An empty list runs the body zero times. The loop variable is an immutable binding local to one iteration: it may shadow an outer variable, and it is discarded before the next iteration and after the loop. `break` and `continue` target the nearest enclosing `for` or `while`, including when the loop kinds are nested. A non-list iterable is a runtime error.
 
 Numeric input and square roots:
 
@@ -252,6 +290,15 @@ print "Score: " + text(score)
 ```
 
 Newt does not implicitly combine strings and numbers.
+
+Clean and inspect command-line text with the string helpers:
+
+```newt
+val command = trim("  Build Project  ")
+print upper(command)
+print len(command)
+print contains(lower(command), "build")
+```
 
 Basic file I/O:
 
@@ -288,7 +335,7 @@ file_write("examples/devlog.md", "# Devlog\n\n")
 file_append("examples/devlog.md", "Today I worked on Newt.\n")
 ```
 
-Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
+Additional list operations, imports/modules, HTTP, and JSON are not part of Newt yet.
 
 ## Main examples
 
@@ -298,8 +345,12 @@ Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
 - `append_file.nt` demonstrates deterministic append behavior.
 - `ghostlog.nt` generates a small Markdown development log.
 - `escape_sequences.nt` demonstrates newline and tab escapes.
+- `text_helpers.nt` demonstrates trimming, case conversion, length, and substring search.
+- `math_helpers.nt` demonstrates powers, absolute values, rounding direction, minimums, and maximums.
+- `projectile_lab.nt` samples a projectile trajectory using trigonometry and a loop.
 - `args_test.nt` demonstrates counting and reading script arguments.
 - `ghostlog_args.nt` demonstrates passing a quoted argument containing a space.
+- `argument_report.nt` writes command-line arguments to a report using a function and loop.
 - `file_read_test.nt` demonstrates reading a complete text file.
 - `file_write_test.nt` demonstrates creating or overwriting a text file.
 - `file_append_test.nt` demonstrates appending text to a file.
@@ -309,7 +360,10 @@ Arrays, imports/modules, HTTP, and JSON are not part of Newt yet.
 - `not_test.nt` demonstrates negating boolean values with `not`.
 - `unary_minus_test.nt` demonstrates negative numbers and negated expressions.
 - `bool_test.nt` demonstrates boolean values and conditional branches.
+- `while.nt` demonstrates condition-controlled repetition and mutable loop state.
 - `while_test.nt` demonstrates a loop and mutable assignment.
+- `continue.nt` demonstrates skipping one loop iteration.
+- `for_loop.nt` demonstrates indexed assignment, `append`, `length`, and first-to-last list iteration.
 - `if_test.nt` demonstrates comparisons with `if` and `else`.
 - `else_if_test.nt` demonstrates ordered `else if` branches and an `else` fallback.
 - `function_test.nt` demonstrates declaring and calling basic functions.

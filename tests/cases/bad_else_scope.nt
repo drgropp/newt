@@ -1,0 +1,7 @@
+if false
+    print "unreachable"
+else
+    val hidden = 13
+    print hidden
+end
+print hidden

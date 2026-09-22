@@ -17,6 +17,9 @@ Created by drgropp.
 #define NEWT_MAX_CALL_DEPTH 256
 #define NEWT_MAX_FUNCTION_PARAMETERS 16
 #define NEWT_MAX_RUNTIME_STRINGS 1024
+#define NEWT_MAX_RUNTIME_LISTS 1024
+#define NEWT_PI 3.14159265358979323846264338327950288
+#define NEWT_E 2.71828182845904523536028747135266250
 
 typedef enum {
     TOKEN_EOF,
@@ -35,7 +38,10 @@ typedef enum {
     TOKEN_ELSE,
     TOKEN_END,
     TOKEN_WHILE,
+    TOKEN_FOR,
+    TOKEN_IN,
     TOKEN_BREAK,
+    TOKEN_CONTINUE,
     TOKEN_PRINT,
     TOKEN_TRUE,
     TOKEN_FALSE,
@@ -268,8 +274,17 @@ static TokenType keyword_type(Token token) {
     if (token_text_equals(token, "while")) {
         return TOKEN_WHILE;
     }
+    if (token_text_equals(token, "for")) {
+        return TOKEN_FOR;
+    }
+    if (token_text_equals(token, "in")) {
+        return TOKEN_IN;
+    }
     if (token_text_equals(token, "break")) {
         return TOKEN_BREAK;
+    }
+    if (token_text_equals(token, "continue")) {
+        return TOKEN_CONTINUE;
     }
     if (token_text_equals(token, "print")) {
         return TOKEN_PRINT;
@@ -504,8 +519,14 @@ static const char *token_type_name(TokenType type) {
             return "END";
         case TOKEN_WHILE:
             return "WHILE";
+        case TOKEN_FOR:
+            return "FOR";
+        case TOKEN_IN:
+            return "IN";
         case TOKEN_BREAK:
             return "BREAK";
+        case TOKEN_CONTINUE:
+            return "CONTINUE";
         case TOKEN_PRINT:
             return "PRINT";
         case TOKEN_TRUE:
@@ -633,6 +654,8 @@ typedef enum {
     EXPR_UNARY,
     EXPR_BINARY,
     EXPR_CALL,
+    EXPR_LIST,
+    EXPR_INDEX,
     EXPR_INPUT_NUMBER,
     EXPR_SQRT
 } ExprKind;
@@ -646,9 +669,12 @@ typedef enum {
     STMT_CALL,
     STMT_RETURN,
     STMT_BREAK,
+    STMT_CONTINUE,
     STMT_ASSIGN,
+    STMT_INDEX_ASSIGN,
     STMT_IF,
     STMT_WHILE,
+    STMT_FOR,
     STMT_PRINT
 } StmtKind;
 
@@ -656,6 +682,7 @@ typedef struct {
     StmtKind kind;
     Token name;
     Expr *expression;
+    Expr *target;
     int then_statements[256];
     int then_count;
     int else_statements[256];
@@ -674,6 +701,8 @@ struct Expr {
     Expr *right;
     int argument_start;
     int argument_count;
+    int element_start;
+    int element_count;
 };
 
 typedef struct {
@@ -690,6 +719,8 @@ typedef struct {
     int parameter_count;
     Expr *call_arguments[1024];
     int call_argument_count;
+    Expr *list_elements[1024];
+    int list_element_count;
     int top_level_statements[256];
     int top_level_statement_count;
 } Parser;
@@ -702,6 +733,7 @@ static void parser_init(Parser *parser, const char *path, const char *source) {
     parser->statement_count = 0;
     parser->parameter_count = 0;
     parser->call_argument_count = 0;
+    parser->list_element_count = 0;
     parser->top_level_statement_count = 0;
     parser->current.type = TOKEN_EOF;
     parser->current.start = source;
@@ -776,6 +808,8 @@ static Expr *new_expr(Parser *parser, ExprKind kind, Token token) {
     expr->right = NULL;
     expr->argument_start = 0;
     expr->argument_count = 0;
+    expr->element_start = 0;
+    expr->element_count = 0;
     return expr;
 }
 
@@ -792,6 +826,7 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->kind = kind;
     stmt->name = name;
     stmt->expression = expression;
+    stmt->target = NULL;
     stmt->then_count = 0;
     stmt->else_count = 0;
     stmt->has_else = 0;
@@ -870,6 +905,51 @@ static Expr *finish_function_call(Parser *parser, Token name) {
     return call;
 }
 
+static Expr *parse_list_literal(Parser *parser, Token opening_bracket) {
+    Expr *list = new_expr(parser, EXPR_LIST, opening_bracket);
+    Expr *elements[1024];
+    int i;
+
+    if (list == NULL) {
+        return NULL;
+    }
+
+    if (parser->current.type != TOKEN_RIGHT_BRACKET) {
+        do {
+            Expr *element;
+
+            if (list->element_count >= 1024) {
+                parser_error(parser, parser->current, "list literal has too many elements");
+                return NULL;
+            }
+
+            element = parse_expression(parser);
+            if (element == NULL || parser->had_error) {
+                return NULL;
+            }
+            elements[list->element_count] = element;
+            list->element_count++;
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+
+    parser_consume(parser, TOKEN_RIGHT_BRACKET, "expected ']' after list elements");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    if (parser->list_element_count + list->element_count > 1024) {
+        parser_error(parser, opening_bracket, "too many list elements");
+        return NULL;
+    }
+    list->element_start = parser->list_element_count;
+    for (i = 0; i < list->element_count; i++) {
+        parser->list_elements[parser->list_element_count] = elements[i];
+        parser->list_element_count++;
+    }
+
+    return list;
+}
+
 static Expr *parse_primary(Parser *parser) {
     if (parser_match(parser, TOKEN_NUMBER)) {
         return new_expr(parser, EXPR_NUMBER, parser->previous);
@@ -934,6 +1014,9 @@ static Expr *parse_primary(Parser *parser) {
     if (parser_match(parser, TOKEN_FALSE)) {
         return new_expr(parser, EXPR_FALSE, parser->previous);
     }
+    if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
+        return parse_list_literal(parser, parser->previous);
+    }
     if (parser_match(parser, TOKEN_LEFT_PAREN)) {
         Expr *expr = parse_expression(parser);
         parser_consume(parser, TOKEN_RIGHT_PAREN, "expected ')' after expression");
@@ -942,6 +1025,43 @@ static Expr *parse_primary(Parser *parser) {
 
     parser_error(parser, parser->current, "expected expression");
     return NULL;
+}
+
+static Expr *finish_list_indexes(Parser *parser, Expr *expr) {
+    while (expr != NULL &&
+           !parser->had_error &&
+           parser_match(parser, TOKEN_LEFT_BRACKET)) {
+        Token opening_bracket = parser->previous;
+        Expr *index;
+        Expr *index_expr;
+
+        if (parser->current.type == TOKEN_RIGHT_BRACKET) {
+            parser_error(parser, parser->current, "expected index expression");
+            return NULL;
+        }
+        index = parse_expression(parser);
+        if (index == NULL || parser->had_error) {
+            return NULL;
+        }
+        parser_consume(parser, TOKEN_RIGHT_BRACKET, "expected ']' after list index");
+        if (parser->had_error) {
+            return NULL;
+        }
+
+        index_expr = new_expr(parser, EXPR_INDEX, opening_bracket);
+        if (index_expr == NULL) {
+            return NULL;
+        }
+        index_expr->left = expr;
+        index_expr->right = index;
+        expr = index_expr;
+    }
+
+    return expr;
+}
+
+static Expr *parse_postfix(Parser *parser) {
+    return finish_list_indexes(parser, parse_primary(parser));
 }
 
 static Expr *parse_unary(Parser *parser) {
@@ -960,7 +1080,7 @@ static Expr *parse_unary(Parser *parser) {
         return unary;
     }
 
-    return parse_primary(parser);
+    return parse_postfix(parser);
 }
 
 static Expr *parse_factor(Parser *parser) {
@@ -1185,6 +1305,25 @@ static void print_expression_tree(Parser *parser, Expr *expr, int indent) {
             }
             break;
         }
+        case EXPR_LIST: {
+            int i;
+
+            printf("LIST elements=%d\n", expr->element_count);
+            for (i = 0; i < expr->element_count; i++) {
+                Expr *element = parser->list_elements[expr->element_start + i];
+                print_expression_tree(parser, element, indent + 2);
+            }
+            break;
+        }
+        case EXPR_INDEX:
+            printf("INDEX\n");
+            print_indent(indent + 2);
+            printf("TARGET\n");
+            print_expression_tree(parser, expr->left, indent + 4);
+            print_indent(indent + 2);
+            printf("POSITION\n");
+            print_expression_tree(parser, expr->right, indent + 4);
+            break;
         case EXPR_INPUT_NUMBER:
             printf("INPUT_NUMBER %.*s\n", expr->token.length, expr->token.start);
             break;
@@ -1277,6 +1416,26 @@ static Stmt *parse_assignment_statement(Parser *parser) {
     return new_stmt(parser, STMT_ASSIGN, name, expr);
 }
 
+static Stmt *parse_index_assignment_statement(Parser *parser, Token name) {
+    Expr *target = new_expr(parser, EXPR_IDENT, name);
+    Expr *value;
+    Stmt *stmt;
+
+    target = finish_list_indexes(parser, target);
+    parser_consume(parser, TOKEN_EQUAL, "expected '=' after indexed assignment target");
+    value = parse_expression(parser);
+    parser_consume_statement_end(parser);
+    if (target == NULL || value == NULL || parser->had_error) {
+        return NULL;
+    }
+
+    stmt = new_stmt(parser, STMT_INDEX_ASSIGN, name, value);
+    if (stmt != NULL) {
+        stmt->target = target;
+    }
+    return stmt;
+}
+
 static Stmt *parse_function_call(Parser *parser, Token name) {
     Expr *call;
 
@@ -1323,6 +1482,17 @@ static Stmt *parse_break_statement(Parser *parser) {
     }
 
     return new_stmt(parser, STMT_BREAK, break_token, NULL);
+}
+
+static Stmt *parse_continue_statement(Parser *parser) {
+    Token continue_token = parser->previous;
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    return new_stmt(parser, STMT_CONTINUE, continue_token, NULL);
 }
 
 static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int statements[256], int *count) {
@@ -1584,6 +1754,68 @@ static Stmt *parse_while_statement(Parser *parser) {
     stmt->body_count = body_count;
     return stmt;
 }
+
+static Stmt *parse_for_statement(Parser *parser) {
+    Token name;
+    Expr *iterable;
+    Stmt *stmt;
+    int body_statements[256];
+    int body_count;
+    int i;
+
+    parser_consume(parser, TOKEN_IDENT, "expected loop variable after 'for'");
+    if (parser->had_error) {
+        return NULL;
+    }
+    name = parser->previous;
+
+    parser_consume(parser, TOKEN_IN, "expected 'in' after for loop variable");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    if (parser->current.type == TOKEN_NEWLINE ||
+        parser->current.type == TOKEN_EOF ||
+        parser->current.type == TOKEN_END) {
+        parser_error(parser, parser->current, "expected iterable expression after 'in'");
+        return NULL;
+    }
+    iterable = parse_expression(parser);
+    if (iterable == NULL || parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parse_block(parser, TOKEN_END, TOKEN_END, body_statements, &body_count);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume(parser, TOKEN_END, "expected 'end' after for statement");
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    parser_consume_statement_end(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+
+    stmt = new_stmt(parser, STMT_FOR, name, iterable);
+    if (stmt == NULL) {
+        return NULL;
+    }
+    for (i = 0; i < body_count; i++) {
+        stmt->body_statements[i] = body_statements[i];
+    }
+    stmt->body_count = body_count;
+    return stmt;
+}
+
 static Stmt *parse_statement(Parser *parser) {
     if (parser_match(parser, TOKEN_VAL)) {
         return parse_declaration(parser, STMT_VAL_DECL, "val");
@@ -1605,12 +1837,20 @@ static Stmt *parse_statement(Parser *parser) {
         return parse_break_statement(parser);
     }
 
+    if (parser_match(parser, TOKEN_CONTINUE)) {
+        return parse_continue_statement(parser);
+    }
+
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
     }
 
     if (parser_match(parser, TOKEN_WHILE)) {
         return parse_while_statement(parser);
+    }
+
+    if (parser_match(parser, TOKEN_FOR)) {
+        return parse_for_statement(parser);
     }
 
     if (parser_match(parser, TOKEN_PRINT)) {
@@ -1622,6 +1862,9 @@ static Stmt *parse_statement(Parser *parser) {
 
         if (parser->current.type == TOKEN_LEFT_PAREN) {
             return parse_function_call(parser, name);
+        }
+        if (parser->current.type == TOKEN_LEFT_BRACKET) {
+            return parse_index_assignment_statement(parser, name);
         }
 
         return parse_assignment_statement(parser);
@@ -1676,10 +1919,24 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             print_indent(indent);
             printf("BREAK\n");
             break;
+        case STMT_CONTINUE:
+            print_indent(indent);
+            printf("CONTINUE\n");
+            break;
         case STMT_ASSIGN:
             print_indent(indent);
             printf("ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
             print_expression_tree(parser, stmt->expression, indent + 2);
+            break;
+        case STMT_INDEX_ASSIGN:
+            print_indent(indent);
+            printf("INDEX_ASSIGN name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_indent(indent + 2);
+            printf("TARGET\n");
+            print_expression_tree(parser, stmt->target, indent + 4);
+            print_indent(indent + 2);
+            printf("VALUE\n");
+            print_expression_tree(parser, stmt->expression, indent + 4);
             break;
         case STMT_IF:
             print_indent(indent);
@@ -1708,6 +1965,19 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             printf("WHILE\n");
             print_indent(indent + 2);
             printf("CONDITION\n");
+            print_expression_tree(parser, stmt->expression, indent + 4);
+            print_indent(indent + 2);
+            printf("BODY\n");
+            for (i = 0; i < stmt->body_count; i++) {
+                int stmt_index = stmt->body_statements[i];
+                print_statement_tree(parser, &parser->statements[stmt_index], indent + 4);
+            }
+            break;
+        case STMT_FOR:
+            print_indent(indent);
+            printf("FOR name=%.*s\n", stmt->name.length, stmt->name.start);
+            print_indent(indent + 2);
+            printf("ITERABLE\n");
             print_expression_tree(parser, stmt->expression, indent + 4);
             print_indent(indent + 2);
             printf("BODY\n");
@@ -1763,15 +2033,25 @@ static int print_parse_tree(const char *path, const char *source) {
 typedef enum {
     VALUE_NUMBER,
     VALUE_STRING,
-    VALUE_BOOL
+    VALUE_BOOL,
+    VALUE_LIST
 } ValueType;
 
-typedef struct {
+typedef struct Value Value;
+
+typedef struct ListValue {
+    Value *elements;
+    int count;
+    int capacity;
+} ListValue;
+
+struct Value {
     ValueType type;
     double number;
     int boolean;
     Token string;
-} Value;
+    ListValue *list;
+};
 
 typedef struct {
     Token name;
@@ -1795,6 +2075,7 @@ typedef struct {
     int scope_depth;
     int is_returning;
     int is_breaking;
+    int is_continuing;
     int loop_depth;
     Value return_value;
     /* Script arguments borrow the argv strings owned by the C runtime. */
@@ -1802,6 +2083,8 @@ typedef struct {
     char **script_arguments;
     char *runtime_strings[NEWT_MAX_RUNTIME_STRINGS];
     int runtime_string_count;
+    ListValue *runtime_lists[NEWT_MAX_RUNTIME_LISTS];
+    int runtime_list_count;
     int had_error;
 } Interpreter;
 
@@ -1816,6 +2099,7 @@ static Value make_number_value(double number) {
     value.string.line = 0;
     value.string.column = 0;
     value.string.error_message = NULL;
+    value.list = NULL;
     return value;
 }
 
@@ -1826,6 +2110,7 @@ static Value make_string_value(Token string) {
     value.number = 0;
     value.boolean = 0;
     value.string = string;
+    value.list = NULL;
     return value;
 }
 
@@ -1840,6 +2125,22 @@ static Value make_bool_value(int boolean) {
     value.string.line = 0;
     value.string.column = 0;
     value.string.error_message = NULL;
+    value.list = NULL;
+    return value;
+}
+
+static Value make_list_value(ListValue *list) {
+    Value value;
+
+    value.type = VALUE_LIST;
+    value.number = 0;
+    value.boolean = 0;
+    value.string.start = NULL;
+    value.string.length = 0;
+    value.string.line = 0;
+    value.string.column = 0;
+    value.string.error_message = NULL;
+    value.list = list;
     return value;
 }
 
@@ -1867,6 +2168,10 @@ static int value_is_truthy(Value value) {
         return value.string.length > 2;
     }
 
+    if (value.type == VALUE_LIST) {
+        return value.list->count > 0;
+    }
+
     return value.number != 0;
 }
 
@@ -1883,6 +2188,8 @@ static const char *value_type_name(ValueType type) {
             return "string";
         case VALUE_BOOL:
             return "boolean";
+        case VALUE_LIST:
+            return "list";
     }
 
     return "unknown value";
@@ -2163,6 +2470,55 @@ static int read_input_number(Interpreter *interpreter, Token prompt, double *num
     return 1;
 }
 
+static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value);
+
+static int resolve_list_index(Interpreter *interpreter,
+                              Value list,
+                              Token target_token,
+                              Expr *index_expr,
+                              int *resolved_index) {
+    Value index;
+    char message[160];
+
+    if (list.type != VALUE_LIST) {
+        runtime_type_error(interpreter,
+                           target_token,
+                           "indexed value",
+                           "a list",
+                           list);
+        return 0;
+    }
+    if (!eval_expression(interpreter, index_expr, &index)) {
+        return 0;
+    }
+    if (index.type != VALUE_NUMBER) {
+        runtime_type_error(interpreter,
+                           index_expr->token,
+                           "list index",
+                           "an integer",
+                           index);
+        return 0;
+    }
+    if (!isfinite(index.number) || floor(index.number) != index.number) {
+        runtime_error(interpreter,
+                      index_expr->token,
+                      "list index must be an integer");
+        return 0;
+    }
+    if (index.number < 0 || index.number >= (double)list.list->count) {
+        snprintf(message,
+                 sizeof(message),
+                 "list index %.0f out of range for list of length %d",
+                 index.number,
+                 list.list->count);
+        runtime_error(interpreter, index_expr->token, message);
+        return 0;
+    }
+
+    *resolved_index = (int)index.number;
+    return 1;
+}
+
 static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
     Value left;
     Value right;
@@ -2220,6 +2576,67 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             return eval_string_literal(interpreter, expr->token, value);
         case EXPR_CALL:
             return call_function(interpreter, expr, value);
+        case EXPR_LIST: {
+            ListValue *list;
+            int i;
+
+            if (interpreter->runtime_list_count >= NEWT_MAX_RUNTIME_LISTS) {
+                runtime_error(interpreter, expr->token, "too many runtime lists");
+                return 0;
+            }
+            list = malloc(sizeof(ListValue));
+            if (list == NULL) {
+                runtime_error(interpreter, expr->token, "not enough memory for list");
+                return 0;
+            }
+            list->elements = NULL;
+            list->count = expr->element_count;
+            list->capacity = expr->element_count;
+            if (list->capacity > 0) {
+                list->elements = malloc((size_t)list->capacity * sizeof(Value));
+                if (list->elements == NULL) {
+                    free(list);
+                    runtime_error(interpreter, expr->token, "not enough memory for list");
+                    return 0;
+                }
+            }
+            for (i = 0; i < list->count; i++) {
+                Expr *element = interpreter->parser->list_elements[expr->element_start + i];
+
+                if (!eval_expression(interpreter, element, &list->elements[i])) {
+                    free(list->elements);
+                    free(list);
+                    return 0;
+                }
+            }
+            if (interpreter->runtime_list_count >= NEWT_MAX_RUNTIME_LISTS) {
+                free(list->elements);
+                free(list);
+                runtime_error(interpreter, expr->token, "too many runtime lists");
+                return 0;
+            }
+            interpreter->runtime_lists[interpreter->runtime_list_count] = list;
+            interpreter->runtime_list_count++;
+            *value = make_list_value(list);
+            return 1;
+        }
+        case EXPR_INDEX: {
+            Value list;
+            int index;
+
+            if (!eval_expression(interpreter, expr->left, &list)) {
+                return 0;
+            }
+            if (!resolve_list_index(interpreter,
+                                    list,
+                                    expr->token,
+                                    expr->right,
+                                    &index)) {
+                return 0;
+            }
+            *value = list.list->elements[index];
+            return 1;
+        }
         case EXPR_UNARY:
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
@@ -2322,6 +2739,10 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                         *value = make_bool_value(left.boolean == right.boolean);
                         return 1;
                     }
+                    if (left.type == VALUE_LIST) {
+                        runtime_error(interpreter, expr->token, "list comparison is not supported");
+                        return 0;
+                    }
                     *value = make_bool_value(left.number == right.number);
                     return 1;
                 case TOKEN_BANG_EQUAL:
@@ -2336,6 +2757,10 @@ static int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     if (left.type == VALUE_BOOL) {
                         *value = make_bool_value(left.boolean != right.boolean);
                         return 1;
+                    }
+                    if (left.type == VALUE_LIST) {
+                        runtime_error(interpreter, expr->token, "list comparison is not supported");
+                        return 0;
                     }
                     *value = make_bool_value(left.number != right.number);
                     return 1;
@@ -2459,6 +2884,36 @@ static void print_string_token(Token token) {
 }
 
 static void print_value(Value value) {
+    int i;
+
+    if (value.type == VALUE_LIST) {
+        putchar('[');
+        for (i = 0; i < value.list->count; i++) {
+            Value element = value.list->elements[i];
+
+            if (i > 0) {
+                printf(", ");
+            }
+            if (element.type == VALUE_STRING) {
+                printf("%.*s", element.string.length, element.string.start);
+            } else if (element.type == VALUE_BOOL) {
+                printf("%s", element.boolean ? "true" : "false");
+            } else if (element.type == VALUE_LIST) {
+                printf("<list>");
+            } else {
+                long long whole = (long long)element.number;
+
+                if (element.number == (double)whole) {
+                    printf("%lld", whole);
+                } else {
+                    printf("%g", element.number);
+                }
+            }
+        }
+        printf("]\n");
+        return;
+    }
+
     if (value.type == VALUE_STRING) {
         print_string_token(value.string);
         return;
@@ -2492,7 +2947,8 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
          i < count &&
          !interpreter->had_error &&
          !interpreter->is_returning &&
-         !interpreter->is_breaking;
+         !interpreter->is_breaking &&
+         !interpreter->is_continuing;
          i++) {
         int stmt_index = statements[i];
         if (!execute_statement(interpreter, &interpreter->parser->statements[stmt_index])) {
@@ -2501,6 +2957,20 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
     }
 
     return 1;
+}
+
+static int execute_scoped_statement_list(Interpreter *interpreter,
+                                         int statements[256],
+                                         int count) {
+    int variable_start = interpreter->variable_count;
+    int succeeded;
+
+    interpreter->scope_depth++;
+    succeeded = execute_statement_list(interpreter, statements, count);
+    interpreter->variable_count = variable_start;
+    interpreter->scope_depth--;
+
+    return succeeded;
 }
 
 static int check_builtin_arity(Interpreter *interpreter, Expr *call, int expected) {
@@ -2825,6 +3295,13 @@ static int call_text(Interpreter *interpreter, Expr *call, Value *value) {
                                   sizeof(content),
                                   "%s",
                                   argument_value.boolean ? "true" : "false");
+    } else if (argument_value.type == VALUE_LIST) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "text argument",
+                           "a number, string, or boolean",
+                           argument_value);
+        return 0;
     } else if (isfinite(argument_value.number) &&
                argument_value.number >= (double)LLONG_MIN &&
                argument_value.number < 9223372036854775808.0 &&
@@ -2861,6 +3338,567 @@ static int call_text(Interpreter *interpreter, Expr *call, Value *value) {
                                value);
 }
 
+static int string_content_length(Value string_value) {
+    int length = string_value.string.length - 2;
+
+    return length < 0 ? 0 : length;
+}
+
+static int make_string_from_content(Interpreter *interpreter,
+                                    Token source,
+                                    const char *content,
+                                    int content_length,
+                                    Value *value) {
+    char *characters;
+
+    if (content_length < 0 || content_length > INT_MAX - 2) {
+        runtime_error(interpreter, source, "string result is too long");
+        return 0;
+    }
+
+    characters = malloc((size_t)content_length + 3);
+    if (characters == NULL) {
+        runtime_error(interpreter, source, "not enough memory for string result");
+        return 0;
+    }
+    characters[0] = '"';
+    memcpy(characters + 1, content, (size_t)content_length);
+    characters[content_length + 1] = '"';
+    characters[content_length + 2] = '\0';
+    return make_runtime_string(interpreter,
+                               source,
+                               characters,
+                               content_length,
+                               value);
+}
+
+static int call_len(Interpreter *interpreter, Expr *call, Value *value) {
+    Value argument;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start],
+                         &argument)) {
+        return 0;
+    }
+    if (argument.type != VALUE_STRING) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "len argument",
+                           "a string",
+                           argument);
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value((double)string_content_length(argument));
+    }
+    return 1;
+}
+
+static int call_length(Interpreter *interpreter, Expr *call, Value *value) {
+    Value argument;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start],
+                         &argument)) {
+        return 0;
+    }
+    if (argument.type != VALUE_LIST) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "length argument",
+                           "a list",
+                           argument);
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value((double)argument.list->count);
+    }
+    return 1;
+}
+
+static int call_append(Interpreter *interpreter, Expr *call, Value *value) {
+    Expr *target;
+    Expr *root;
+    Variable *variable;
+    Value list_value;
+    Value appended_value;
+    Value *grown_elements;
+    int new_capacity;
+
+    if (!check_builtin_arity(interpreter, call, 2)) {
+        return 0;
+    }
+    target = interpreter->parser->call_arguments[call->argument_start];
+    root = target;
+    while (root->kind == EXPR_INDEX) {
+        root = root->left;
+    }
+    if (root->kind != EXPR_IDENT) {
+        runtime_error(interpreter,
+                      target->token,
+                      "append target must be a list binding or indexed list element");
+        return 0;
+    }
+    variable = find_variable(interpreter, root->token);
+    if (variable == NULL) {
+        runtime_name_error(interpreter, root->token, "undefined variable");
+        return 0;
+    }
+    if (!variable->is_mutable) {
+        runtime_name_error(interpreter, root->token, "cannot mutate immutable val");
+        return 0;
+    }
+    if (!eval_expression(interpreter, target, &list_value)) {
+        return 0;
+    }
+    if (list_value.type != VALUE_LIST) {
+        runtime_type_error(interpreter,
+                           target->token,
+                           "append target",
+                           "a list",
+                           list_value);
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start + 1],
+                         &appended_value)) {
+        return 0;
+    }
+
+    if (list_value.list->count == list_value.list->capacity) {
+        if (list_value.list->count == INT_MAX) {
+            runtime_error(interpreter, call->token, "list is too large to append");
+            return 0;
+        }
+        if (list_value.list->capacity < 8) {
+            new_capacity = 8;
+        } else if (list_value.list->capacity > INT_MAX / 2) {
+            new_capacity = INT_MAX;
+        } else {
+            new_capacity = list_value.list->capacity * 2;
+        }
+        if ((size_t)new_capacity > (size_t)-1 / sizeof(Value)) {
+            runtime_error(interpreter, call->token, "list is too large to append");
+            return 0;
+        }
+        grown_elements = realloc(list_value.list->elements,
+                                 (size_t)new_capacity * sizeof(Value));
+        if (grown_elements == NULL) {
+            runtime_error(interpreter, call->token, "not enough memory to append to list");
+            return 0;
+        }
+        list_value.list->elements = grown_elements;
+        list_value.list->capacity = new_capacity;
+    }
+
+    list_value.list->elements[list_value.list->count] = appended_value;
+    list_value.list->count++;
+    if (value != NULL) {
+        *value = make_bool_value(1);
+    }
+    return 1;
+}
+
+static int call_contains(Interpreter *interpreter, Expr *call, Value *value) {
+    Value text_value;
+    Value search_value;
+    int text_length;
+    int search_length;
+    int found = 0;
+    int i;
+
+    if (!check_builtin_arity(interpreter, call, 2)) {
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start],
+                         &text_value)) {
+        return 0;
+    }
+    if (text_value.type != VALUE_STRING) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "contains text",
+                           "a string",
+                           text_value);
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start + 1],
+                         &search_value)) {
+        return 0;
+    }
+    if (search_value.type != VALUE_STRING) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "contains search text",
+                           "a string",
+                           search_value);
+        return 0;
+    }
+
+    text_length = string_content_length(text_value);
+    search_length = string_content_length(search_value);
+    if (search_length == 0) {
+        found = 1;
+    } else if (search_length <= text_length) {
+        for (i = 0; i <= text_length - search_length; i++) {
+            if (memcmp(text_value.string.start + 1 + i,
+                       search_value.string.start + 1,
+                       (size_t)search_length) == 0) {
+                found = 1;
+                break;
+            }
+        }
+    }
+
+    if (value != NULL) {
+        *value = make_bool_value(found);
+    }
+    return 1;
+}
+
+static int call_change_case(Interpreter *interpreter,
+                            Expr *call,
+                            const char *name,
+                            int to_upper,
+                            Value *value) {
+    Value argument;
+    int content_length;
+    char *characters;
+    char subject[64];
+    int i;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start],
+                         &argument)) {
+        return 0;
+    }
+    if (argument.type != VALUE_STRING) {
+        snprintf(subject, sizeof(subject), "%s argument", name);
+        runtime_type_error(interpreter,
+                           call->token,
+                           subject,
+                           "a string",
+                           argument);
+        return 0;
+    }
+    if (value == NULL) {
+        return 1;
+    }
+
+    content_length = string_content_length(argument);
+    if (content_length > INT_MAX - 2) {
+        runtime_error(interpreter, call->token, "string result is too long");
+        return 0;
+    }
+    characters = malloc((size_t)content_length + 3);
+    if (characters == NULL) {
+        runtime_error(interpreter, call->token, "not enough memory for string result");
+        return 0;
+    }
+    characters[0] = '"';
+    for (i = 0; i < content_length; i++) {
+        unsigned char ch = (unsigned char)argument.string.start[i + 1];
+
+        if (to_upper && ch >= 'a' && ch <= 'z') {
+            ch = (unsigned char)(ch - 'a' + 'A');
+        } else if (!to_upper && ch >= 'A' && ch <= 'Z') {
+            ch = (unsigned char)(ch - 'A' + 'a');
+        }
+        characters[i + 1] = (char)ch;
+    }
+    characters[content_length + 1] = '"';
+    characters[content_length + 2] = '\0';
+    return make_runtime_string(interpreter,
+                               call->token,
+                               characters,
+                               content_length,
+                               value);
+}
+
+static int ascii_is_whitespace(unsigned char ch) {
+    return ch == ' ' ||
+           ch == '\t' ||
+           ch == '\n' ||
+           ch == '\r' ||
+           ch == '\f' ||
+           ch == '\v';
+}
+
+static int call_trim(Interpreter *interpreter, Expr *call, Value *value) {
+    Value argument;
+    int content_length;
+    int start = 0;
+    int end;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start],
+                         &argument)) {
+        return 0;
+    }
+    if (argument.type != VALUE_STRING) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           "trim argument",
+                           "a string",
+                           argument);
+        return 0;
+    }
+    if (value == NULL) {
+        return 1;
+    }
+
+    content_length = string_content_length(argument);
+    end = content_length;
+    while (start < end &&
+           ascii_is_whitespace((unsigned char)argument.string.start[start + 1])) {
+        start++;
+    }
+    while (end > start &&
+           ascii_is_whitespace((unsigned char)argument.string.start[end])) {
+        end--;
+    }
+
+    if (start == 0 && end == content_length) {
+        *value = argument;
+        return 1;
+    }
+    return make_string_from_content(interpreter,
+                                    call->token,
+                                    argument.string.start + 1 + start,
+                                    end - start,
+                                    value);
+}
+
+static int get_number_argument(Interpreter *interpreter,
+                               Expr *call,
+                               int index,
+                               const char *subject,
+                               double *number) {
+    Value argument;
+
+    if (!eval_expression(interpreter,
+                         interpreter->parser->call_arguments[call->argument_start + index],
+                         &argument)) {
+        return 0;
+    }
+    if (argument.type != VALUE_NUMBER) {
+        runtime_type_error(interpreter,
+                           call->token,
+                           subject,
+                           "a number",
+                           argument);
+        return 0;
+    }
+
+    *number = argument.number;
+    return 1;
+}
+
+static int call_unary_math(Interpreter *interpreter,
+                           Expr *call,
+                           const char *name,
+                           double (*operation)(double),
+                           Value *value) {
+    char subject[64];
+    double argument;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+    snprintf(subject, sizeof(subject), "%s argument", name);
+    if (!get_number_argument(interpreter, call, 0, subject, &argument)) {
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value(operation(argument));
+    }
+    return 1;
+}
+
+typedef enum {
+    SCIENTIFIC_DOMAIN_ALL,
+    SCIENTIFIC_DOMAIN_UNIT,
+    SCIENTIFIC_DOMAIN_POSITIVE
+} ScientificMathDomain;
+
+static int call_scientific_unary(Interpreter *interpreter,
+                                 Expr *call,
+                                 const char *name,
+                                 double (*operation)(double),
+                                 ScientificMathDomain domain,
+                                 Value *value) {
+    char subject[64];
+    char message[128];
+    double argument;
+    double result;
+
+    if (!check_builtin_arity(interpreter, call, 1)) {
+        return 0;
+    }
+    snprintf(subject, sizeof(subject), "%s argument", name);
+    if (!get_number_argument(interpreter, call, 0, subject, &argument)) {
+        return 0;
+    }
+    if (!isfinite(argument)) {
+        snprintf(message, sizeof(message), "%s argument must be finite", name);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+    if (domain == SCIENTIFIC_DOMAIN_UNIT &&
+        (argument < -1.0 || argument > 1.0)) {
+        snprintf(message,
+                 sizeof(message),
+                 "%s argument must be between -1 and 1",
+                 name);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+    if (domain == SCIENTIFIC_DOMAIN_POSITIVE && argument <= 0.0) {
+        snprintf(message,
+                 sizeof(message),
+                 "%s argument must be greater than zero",
+                 name);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+
+    errno = 0;
+    result = operation(argument);
+    if (errno == EDOM || isnan(result)) {
+        snprintf(message,
+                 sizeof(message),
+                 "%s argument is outside the numeric domain",
+                 name);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+    if (errno == ERANGE || !isfinite(result)) {
+        snprintf(message, sizeof(message), "%s result is out of range", name);
+        runtime_error(interpreter, call->token, message);
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value(result);
+    }
+    return 1;
+}
+
+static int call_atan2(Interpreter *interpreter, Expr *call, Value *value) {
+    double y;
+    double x;
+    double result;
+
+    if (!check_builtin_arity(interpreter, call, 2)) {
+        return 0;
+    }
+    if (!get_number_argument(interpreter, call, 0, "atan2 y", &y) ||
+        !get_number_argument(interpreter, call, 1, "atan2 x", &x)) {
+        return 0;
+    }
+    if (!isfinite(y) || !isfinite(x)) {
+        runtime_error(interpreter, call->token, "atan2 arguments must be finite");
+        return 0;
+    }
+    if (y == 0.0 && x == 0.0) {
+        runtime_error(interpreter, call->token, "atan2 arguments cannot both be zero");
+        return 0;
+    }
+
+    errno = 0;
+    result = atan2(y, x);
+    if (errno == EDOM || isnan(result)) {
+        runtime_error(interpreter, call->token, "atan2 arguments are outside the numeric domain");
+        return 0;
+    }
+    if (errno == ERANGE || !isfinite(result)) {
+        runtime_error(interpreter, call->token, "atan2 result is out of range");
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value(result);
+    }
+    return 1;
+}
+
+static int call_min_max(Interpreter *interpreter,
+                        Expr *call,
+                        const char *name,
+                        int choose_max,
+                        Value *value) {
+    char first_subject[64];
+    char second_subject[64];
+    double first;
+    double second;
+    double result;
+
+    if (!check_builtin_arity(interpreter, call, 2)) {
+        return 0;
+    }
+    snprintf(first_subject, sizeof(first_subject), "%s first argument", name);
+    snprintf(second_subject, sizeof(second_subject), "%s second argument", name);
+    if (!get_number_argument(interpreter, call, 0, first_subject, &first) ||
+        !get_number_argument(interpreter, call, 1, second_subject, &second)) {
+        return 0;
+    }
+
+    result = choose_max
+        ? (first > second ? first : second)
+        : (first < second ? first : second);
+    if (value != NULL) {
+        *value = make_number_value(result);
+    }
+    return 1;
+}
+
+static int call_pow(Interpreter *interpreter, Expr *call, Value *value) {
+    double base;
+    double exponent;
+    double result;
+
+    if (!check_builtin_arity(interpreter, call, 2)) {
+        return 0;
+    }
+    if (!get_number_argument(interpreter, call, 0, "pow base", &base) ||
+        !get_number_argument(interpreter, call, 1, "pow exponent", &exponent)) {
+        return 0;
+    }
+
+    errno = 0;
+    result = pow(base, exponent);
+    if (errno == EDOM || isnan(result)) {
+        runtime_error(interpreter, call->token, "pow arguments are outside the numeric domain");
+        return 0;
+    }
+    if (errno == ERANGE || !isfinite(result)) {
+        runtime_error(interpreter, call->token, "pow result is out of range");
+        return 0;
+    }
+
+    if (value != NULL) {
+        *value = make_number_value(result);
+    }
+    return 1;
+}
+
 static int call_function(Interpreter *interpreter,
                          Expr *call,
                          Value *value) {
@@ -2870,6 +3908,7 @@ static int call_function(Interpreter *interpreter,
     Value previous_return_value = interpreter->return_value;
     int previous_returning = interpreter->is_returning;
     int previous_breaking = interpreter->is_breaking;
+    int previous_continuing = interpreter->is_continuing;
     int previous_loop_depth = interpreter->loop_depth;
     int variable_start = interpreter->variable_count;
     int succeeded = 1;
@@ -2893,6 +3932,128 @@ static int call_function(Interpreter *interpreter,
     }
     if (token_text_equals(call->token, "text")) {
         return call_text(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "len")) {
+        return call_len(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "length")) {
+        return call_length(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "append")) {
+        return call_append(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "contains")) {
+        return call_contains(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "upper")) {
+        return call_change_case(interpreter, call, "upper", 1, value);
+    }
+    if (token_text_equals(call->token, "lower")) {
+        return call_change_case(interpreter, call, "lower", 0, value);
+    }
+    if (token_text_equals(call->token, "trim")) {
+        return call_trim(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "abs")) {
+        return call_unary_math(interpreter, call, "abs", fabs, value);
+    }
+    if (token_text_equals(call->token, "floor")) {
+        return call_unary_math(interpreter, call, "floor", floor, value);
+    }
+    if (token_text_equals(call->token, "ceil")) {
+        return call_unary_math(interpreter, call, "ceil", ceil, value);
+    }
+    if (token_text_equals(call->token, "sin")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "sin",
+                                     sin,
+                                     SCIENTIFIC_DOMAIN_ALL,
+                                     value);
+    }
+    if (token_text_equals(call->token, "cos")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "cos",
+                                     cos,
+                                     SCIENTIFIC_DOMAIN_ALL,
+                                     value);
+    }
+    if (token_text_equals(call->token, "tan")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "tan",
+                                     tan,
+                                     SCIENTIFIC_DOMAIN_ALL,
+                                     value);
+    }
+    if (token_text_equals(call->token, "asin")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "asin",
+                                     asin,
+                                     SCIENTIFIC_DOMAIN_UNIT,
+                                     value);
+    }
+    if (token_text_equals(call->token, "acos")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "acos",
+                                     acos,
+                                     SCIENTIFIC_DOMAIN_UNIT,
+                                     value);
+    }
+    if (token_text_equals(call->token, "atan")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "atan",
+                                     atan,
+                                     SCIENTIFIC_DOMAIN_ALL,
+                                     value);
+    }
+    if (token_text_equals(call->token, "atan2")) {
+        return call_atan2(interpreter, call, value);
+    }
+    if (token_text_equals(call->token, "log")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "log",
+                                     log,
+                                     SCIENTIFIC_DOMAIN_POSITIVE,
+                                     value);
+    }
+    if (token_text_equals(call->token, "log10")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "log10",
+                                     log10,
+                                     SCIENTIFIC_DOMAIN_POSITIVE,
+                                     value);
+    }
+    if (token_text_equals(call->token, "exp")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "exp",
+                                     exp,
+                                     SCIENTIFIC_DOMAIN_ALL,
+                                     value);
+    }
+    if (token_text_equals(call->token, "round")) {
+        return call_scientific_unary(interpreter,
+                                     call,
+                                     "round",
+                                     round,
+                                     SCIENTIFIC_DOMAIN_ALL,
+                                     value);
+    }
+    if (token_text_equals(call->token, "min")) {
+        return call_min_max(interpreter, call, "min", 0, value);
+    }
+    if (token_text_equals(call->token, "max")) {
+        return call_min_max(interpreter, call, "max", 1, value);
+    }
+    if (token_text_equals(call->token, "pow")) {
+        return call_pow(interpreter, call, value);
     }
 
     function = find_function(interpreter, call->token);
@@ -2926,6 +4087,7 @@ static int call_function(Interpreter *interpreter,
     interpreter->scope_depth++;
     interpreter->is_returning = 0;
     interpreter->is_breaking = 0;
+    interpreter->is_continuing = 0;
     interpreter->loop_depth = 0;
 
     for (i = 0; i < function->declaration->parameter_count; i++) {
@@ -2953,6 +4115,7 @@ static int call_function(Interpreter *interpreter,
     interpreter->call_depth--;
     interpreter->is_returning = previous_returning;
     interpreter->is_breaking = previous_breaking;
+    interpreter->is_continuing = previous_continuing;
     interpreter->loop_depth = previous_loop_depth;
     interpreter->return_value = previous_return_value;
 
@@ -3000,6 +4163,15 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             }
             interpreter->is_breaking = 1;
             return 1;
+        case STMT_CONTINUE:
+            if (interpreter->loop_depth == 0) {
+                runtime_error(interpreter,
+                              stmt->name,
+                              "continue can only be used inside a loop");
+                return 0;
+            }
+            interpreter->is_continuing = 1;
+            return 1;
         case STMT_VAL_DECL:
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
@@ -3026,6 +4198,36 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             variable->value = value;
             return 1;
         }
+        case STMT_INDEX_ASSIGN: {
+            Variable *variable = find_variable(interpreter, stmt->name);
+            Expr *target = stmt->target;
+            Value list;
+            int index;
+
+            if (variable == NULL) {
+                runtime_name_error(interpreter, stmt->name, "undefined variable");
+                return 0;
+            }
+            if (!variable->is_mutable) {
+                runtime_name_error(interpreter, stmt->name, "cannot mutate immutable val");
+                return 0;
+            }
+            if (!eval_expression(interpreter, target->left, &list)) {
+                return 0;
+            }
+            if (!resolve_list_index(interpreter,
+                                    list,
+                                    target->token,
+                                    target->right,
+                                    &index)) {
+                return 0;
+            }
+            if (!eval_expression(interpreter, stmt->expression, &value)) {
+                return 0;
+            }
+            list.list->elements[index] = value;
+            return 1;
+        }
 
         case STMT_PRINT:
             return print_runtime_expression(interpreter, stmt->expression);
@@ -3047,7 +4249,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 return 1;
             }
 
-            return execute_statement_list(interpreter, branch, branch_count);
+            return execute_scoped_statement_list(interpreter, branch, branch_count);
         }
         case STMT_WHILE: {
             int iterations = 0;
@@ -3071,7 +4273,9 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 }
 
                 iterations++;
-                if (!execute_statement_list(interpreter, stmt->body_statements, stmt->body_count)) {
+                if (!execute_scoped_statement_list(interpreter,
+                                                   stmt->body_statements,
+                                                   stmt->body_count)) {
                     succeeded = 0;
                     break;
                 }
@@ -3082,8 +4286,64 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                     interpreter->is_breaking = 0;
                     break;
                 }
+                if (interpreter->is_continuing) {
+                    interpreter->is_continuing = 0;
+                    continue;
+                }
             }
 
+            interpreter->loop_depth--;
+            return succeeded && !interpreter->had_error;
+        }
+        case STMT_FOR: {
+            Value iterable;
+            int iterable_count;
+            int index;
+            int succeeded = 1;
+
+            if (!eval_expression(interpreter, stmt->expression, &iterable)) {
+                return 0;
+            }
+            if (iterable.type != VALUE_LIST) {
+                runtime_type_error(interpreter,
+                                   stmt->expression->token,
+                                   "for iterable",
+                                   "a list",
+                                   iterable);
+                return 0;
+            }
+
+            iterable_count = iterable.list->count;
+            interpreter->loop_depth++;
+            for (index = 0; index < iterable_count; index++) {
+                int variable_start = interpreter->variable_count;
+
+                interpreter->scope_depth++;
+                if (!define_variable(interpreter,
+                                     stmt->name,
+                                     iterable.list->elements[index],
+                                     0)) {
+                    succeeded = 0;
+                } else if (!execute_statement_list(interpreter,
+                                                   stmt->body_statements,
+                                                   stmt->body_count)) {
+                    succeeded = 0;
+                }
+                interpreter->variable_count = variable_start;
+                interpreter->scope_depth--;
+
+                if (!succeeded || interpreter->is_returning) {
+                    break;
+                }
+                if (interpreter->is_breaking) {
+                    interpreter->is_breaking = 0;
+                    break;
+                }
+                if (interpreter->is_continuing) {
+                    interpreter->is_continuing = 0;
+                    continue;
+                }
+            }
             interpreter->loop_depth--;
             return succeeded && !interpreter->had_error;
         }
@@ -3111,12 +4371,30 @@ static int run_program(const char *path,
     interpreter.scope_depth = 0;
     interpreter.is_returning = 0;
     interpreter.is_breaking = 0;
+    interpreter.is_continuing = 0;
     interpreter.loop_depth = 0;
     interpreter.return_value = make_number_value(0);
     interpreter.script_argument_count = script_argument_count;
     interpreter.script_arguments = script_arguments;
     interpreter.runtime_string_count = 0;
+    interpreter.runtime_list_count = 0;
     interpreter.had_error = 0;
+
+    {
+        Token pi_name = { TOKEN_IDENT, "pi", 2, 0, 0, NULL };
+        Token e_name = { TOKEN_IDENT, "e", 1, 0, 0, NULL };
+
+        if (!define_variable(&interpreter,
+                             pi_name,
+                             make_number_value(NEWT_PI),
+                             0) ||
+            !define_variable(&interpreter,
+                             e_name,
+                             make_number_value(NEWT_E),
+                             0)) {
+            return 0;
+        }
+    }
 
     for (i = 0; i < parser.top_level_statement_count && !interpreter.had_error; i++) {
         int stmt_index = parser.top_level_statements[i];
@@ -3126,6 +4404,10 @@ static int run_program(const char *path,
     {
         int succeeded = !interpreter.had_error;
 
+        for (i = 0; i < interpreter.runtime_list_count; i++) {
+            free(interpreter.runtime_lists[i]->elements);
+            free(interpreter.runtime_lists[i]);
+        }
         for (i = 0; i < interpreter.runtime_string_count; i++) {
             free(interpreter.runtime_strings[i]);
         }

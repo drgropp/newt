@@ -1,0 +1,29 @@
+mut count = 0
+
+while count < 5
+    count = count + 1
+    val iteration = count
+
+    if count == 2
+        val skipped = 200
+        continue
+    end
+
+    print iteration
+    if count == 3
+        val stopped = 300
+        break
+    end
+end
+
+print count
+
+fn early_return()
+    if true
+        val answer = 7
+        return answer
+    end
+    return 0
+end
+
+print early_return()

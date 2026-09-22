@@ -1,0 +1,7 @@
+mut count = 0
+while count < 1
+    val local = 42
+    print local
+    count = count + 1
+end
+print local

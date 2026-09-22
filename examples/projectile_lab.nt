@@ -1,0 +1,35 @@
+# Projectile motion without air resistance.
+# Angles are converted from degrees to radians before calling sin and cos.
+
+val initial_speed = 50
+val launch_angle_degrees = 45
+val gravity = 9.81
+val time_step = 0.5
+
+val launch_angle = launch_angle_degrees * pi / 180
+val horizontal_speed = initial_speed * cos(launch_angle)
+val vertical_speed = initial_speed * sin(launch_angle)
+
+mut time = 0
+mut horizontal_position = 0
+mut vertical_position = 0
+
+print "Projectile trajectory"
+print "speed=" + text(initial_speed) + " m/s  angle=" + text(launch_angle_degrees) + " degrees"
+print "t=0 s  x=0 m  y=0 m"
+
+time = time + time_step
+vertical_position = vertical_speed * time - 0.5 * gravity * time * time
+
+while vertical_position > 0
+    horizontal_position = horizontal_speed * time
+    print "t=" + text(time) + " s  x=" + text(horizontal_position) + " m  y=" + text(vertical_position) + " m"
+
+    time = time + time_step
+    vertical_position = vertical_speed * time - 0.5 * gravity * time * time
+end
+
+val flight_time = 2 * vertical_speed / gravity
+val landing_distance = horizontal_speed * flight_time
+
+print "landing t=" + text(flight_time) + " s  x=" + text(landing_distance) + " m  y=0 m"

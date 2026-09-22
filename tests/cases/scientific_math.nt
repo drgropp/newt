@@ -1,0 +1,21 @@
+print sin(pi / 2)
+print cos(0)
+print tan(pi / 4)
+print asin(1)
+print acos(1)
+print atan(1)
+print atan2(1, -1)
+print log(e)
+print log10(1000)
+print exp(1)
+print round(2.5)
+print round(-2.5)
+print pi
+print e
+
+if true
+    val pi = 3
+    print pi
+end
+
+print pi

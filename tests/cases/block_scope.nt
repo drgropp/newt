@@ -1,0 +1,28 @@
+val x = 10
+
+if true
+    val x = 20
+    print x
+
+    if true
+        val x = 30
+        print x
+    end
+
+    print x
+end
+
+print x
+
+mut changed = 0
+if true
+    changed = 5
+end
+print changed
+
+if false
+    print "unreachable"
+else
+    val branch_value = 40
+    print branch_value
+end

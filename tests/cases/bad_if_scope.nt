@@ -1,0 +1,5 @@
+if true
+    val hidden = 12
+    print hidden
+end
+print hidden

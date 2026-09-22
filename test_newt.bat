@@ -31,6 +31,18 @@ echo [escape_sequences.nt - direct invocation]
 .\newt.exe examples/escape_sequences.nt
 if errorlevel 1 exit /b 1
 
+echo [text_helpers.nt - direct invocation]
+.\newt.exe examples/text_helpers.nt
+if errorlevel 1 exit /b 1
+
+echo [math_helpers.nt - direct invocation]
+.\newt.exe examples/math_helpers.nt
+if errorlevel 1 exit /b 1
+
+echo [projectile_lab.nt - direct invocation]
+.\newt.exe examples/projectile_lab.nt
+if errorlevel 1 exit /b 1
+
 echo [args_test.nt]
 .\newt.exe --run examples/args_test.nt hello newt
 if errorlevel 1 exit /b 1
@@ -81,6 +93,14 @@ if errorlevel 1 exit /b 1
 
 echo [break_test.nt]
 .\newt.exe --run examples/break_test.nt
+if errorlevel 1 exit /b 1
+
+echo [continue.nt]
+.\newt.exe --run examples/continue.nt
+if errorlevel 1 exit /b 1
+
+echo [for_loop.nt]
+.\newt.exe --run examples/for_loop.nt
 if errorlevel 1 exit /b 1
 
 echo [if_test.nt]

@@ -12,6 +12,8 @@ mut score = 10
 score = score + 5
 ```
 
+Variables declared in an `if`/`else` branch or a `while` body are local to that block. A block may shadow an outer name, while assignment still finds and updates an outer `mut` when no local binding has that name.
+
 ## Print and input
 
 `print` writes a value followed by a newline. `input_number` displays a prompt and reads a number.
@@ -52,7 +54,31 @@ while count <= 3
 end
 ```
 
-`break` exits the nearest enclosing `while`. In nested loops, it exits only the innermost loop. A function cannot use `break` to exit a loop in its caller; the function must be running its own loop. Using `break` outside a loop in the current function call is a runtime error.
+Use `for ... in` to visit every element of a list from first to last. Use a `mut` binding for a list that needs to change:
+
+```newt
+mut names = ["newt", "ghostnote", "stray signal"]
+
+names[1] = "moss"
+append(names, "river")
+
+print names[0]
+print length(names)
+
+for name in names
+    print name
+end
+```
+
+Indexes start at zero, so `names[0]` is the first element. Assigning to an existing index replaces that element, and `append(names, value)` adds one element at the end. Both operations require a `mut` binding; mutation through `val` is a runtime error. `length(names)` returns the number of elements. Nested indexing and indexed assignment such as `rows[1][0]` are also supported. Indexes must be whole numbers within the list's bounds, and only lists can be indexed or passed to `length`.
+
+The expression after `in` is evaluated once and must produce a list. Its length is captured when the loop starts, so mutations made before the loop are visible while appending during the loop does not extend that loop. An empty list skips the body. The loop variable contains the current element and is immutable. It exists only for that iteration, may shadow an outer variable, and is unavailable after the loop.
+
+`break` exits the nearest enclosing `for` or `while`. In nested loops, it exits only the innermost loop. A function cannot use `break` to exit a loop in its caller; the function must be running its own loop. Using `break` outside a loop in the current function call is a runtime error.
+
+`continue` skips the rest of the current iteration of the nearest enclosing loop. A `while` checks its condition again, while a `for` advances to its next element. In nested loops, it affects only the innermost loop. A function cannot use `continue` on a caller's loop, and using it outside a loop in the current function call is a runtime error.
+
+List literals use square brackets and commas. Lists can be stored, indexed, changed through mutable bindings, measured with `length`, and iterated. `append` returns `true` after a successful mutation.
 
 ## Booleans
 
@@ -79,6 +105,17 @@ print "C:\\notes"
 
 Only those five escapes are valid. An unsupported escape or a backslash left at the end of an unterminated string is a lexer error reported at the backslash.
 
+Use `len` to count string bytes, `contains` for case-sensitive substring search, `upper` and `lower` for ASCII case conversion, and `trim` to remove surrounding ASCII whitespace.
+
+```newt
+val command = trim("  Build Project  ")
+print upper(command)
+print len(command)
+print contains(lower(command), "build")
+```
+
+`contains(text, "")` is always true. Newt strings are byte strings, so `len` counts UTF-8 bytes rather than Unicode characters, and case conversion leaves non-ASCII bytes unchanged.
+
 ## Math
 
 Newt supports `+`, `-`, `*`, `/`, comparisons, negative numbers, and grouped expressions. `+` also concatenates two strings.
@@ -96,7 +133,21 @@ Use `sqrt` for the square root of a non-negative number.
 
 ```newt
 print sqrt(25)
+print abs(-12.5)
+print floor(3.9)
+print ceil(3.1)
+print min(4, -2)
+print max(4, -2)
+print pow(2, 8)
+print sin(pi / 2)
+print atan2(1, -1)
+print log(e)
+print log10(1000)
+print exp(1)
+print round(2.5)
 ```
+
+`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, and `atan2` use radians. `pi` and `e` are predefined immutable numbers. Inverse sine and cosine accept only -1 through 1, logarithms require positive inputs, and scientific helpers report non-finite results as runtime errors.
 
 ## Functions
 
