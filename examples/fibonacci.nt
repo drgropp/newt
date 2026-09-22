@@ -1,0 +1,17 @@
+# fibonacci sequence example
+
+mut first = 0
+mut second = 1
+mut next = 0
+mut count = 0
+
+while count < 10
+print first
+
+next = first + second
+
+first = second
+second = next
+
+count = count + 1
+end
