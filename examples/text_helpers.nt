@@ -1,0 +1,7 @@
+val raw = "  Build Project  "
+val command = trim(raw)
+
+print upper(command)
+print lower(command)
+print "characters=" + text(len(command))
+print contains(lower(command), "build")

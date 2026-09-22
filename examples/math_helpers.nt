@@ -1,0 +1,6 @@
+val estimate = pow(2, 8)
+
+print estimate
+print abs(-12.5)
+print min(floor(3.9), ceil(2.1))
+print max(-4, 6)

@@ -1,0 +1,9 @@
+print len("")
+print len("Newt")
+print len("a\nb")
+print upper("Newt cli 2")
+print lower("Newt CLI 2")
+print "[" + trim(" \t Newt \n") + "]"
+print contains("terminal tools", "tool")
+print contains("terminal tools", "math")
+print contains("abc", "")
