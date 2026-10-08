@@ -245,7 +245,7 @@ The condition is evaluated before every iteration. If it is initially false, the
 Use `for ... in` to visit list elements from first to last. Declare a list with `mut` when its elements or length need to change:
 
 ```newt
-mut names = ["newt", "ghostnote", "stray signal"]
+mut names = ["newt", "ghostnote"]
 
 names[1] = "moss"
 append(names, "river")
@@ -396,10 +396,6 @@ newt/
 ## Status
 
 Newt is experimental, and still in an early stage. Newt is currently being worked on and will continue to have updates.
-
-## GhostNote integration roadmap
-
-This milestone provides the first useful bridge: a Newt script can receive project or note information through command-line arguments and produce local Markdown with the file built-ins. Basic text conversion and stable diagnostic exit statuses are now covered by regression tests. A small GhostNote-facing command contract remains a possible later milestone. Imports, HTTP, and JSON remain outside the preview scope.
 
 ## License
 
