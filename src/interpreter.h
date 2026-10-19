@@ -36,7 +36,9 @@ typedef struct {
 } Function;
 typedef struct {
     Parser *parser;
-    Variable variables[256];
+    /* Allocated once at NEWT_MAX_VARIABLES and never moved, so Variable
+       pointers stay valid while an expression is being evaluated. */
+    Variable *variables;
     int variable_count;
     Function functions[256];
     int function_count;

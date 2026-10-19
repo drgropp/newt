@@ -233,7 +233,7 @@ The preview interpreter uses fixed-size internal storage. Current hard limits in
 - 16 parameters or arguments for a user-defined function;
 - 256 nested function calls;
 - 100,000 iterations per execution of one `while` statement;
-- 256 variables and 256 functions in the active interpreter state;
+- 4,096 variables and 256 functions in the active interpreter state;
 - 256 parsed statements and 1,024 parsed expressions per source file;
 - 1,024 parsed call arguments in total;
 - 1,024 parsed list elements in total;

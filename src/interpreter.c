@@ -760,7 +760,7 @@ static int define_variable(Interpreter *interpreter, Token name, Value value, in
         }
     }
 
-    if (interpreter->variable_count >= 256) {
+    if (interpreter->variable_count >= NEWT_MAX_VARIABLES) {
         runtime_error(interpreter, name, "too many variables");
         return 0;
     }
@@ -1352,6 +1352,11 @@ int run_program(const char *path,
     }
 
     interpreter.parser = &parser;
+    interpreter.variables = malloc(NEWT_MAX_VARIABLES * sizeof(Variable));
+    if (interpreter.variables == NULL) {
+        fprintf(stderr, "error: not enough memory for variables\n");
+        return 0;
+    }
     interpreter.variable_count = 0;
     interpreter.function_count = 0;
     interpreter.call_depth = 0;
@@ -1379,6 +1384,7 @@ int run_program(const char *path,
                              e_name,
                              make_number_value(NEWT_E),
                              0)) {
+            free(interpreter.variables);
             return 0;
         }
     }
@@ -1398,6 +1404,7 @@ int run_program(const char *path,
         for (i = 0; i < interpreter.runtime_string_count; i++) {
             free(interpreter.runtime_strings[i]);
         }
+        free(interpreter.variables);
         return succeeded;
     }
 }
