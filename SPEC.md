@@ -228,7 +228,7 @@ Paths and written content must be strings. Relative paths are resolved by the op
 
 ## Current implementation limits
 
-The preview interpreter uses fixed-size internal storage. Current hard limits include:
+The preview interpreter uses fixed-size storage for most internal structures. Current hard limits include:
 
 - 16 parameters or arguments for a user-defined function;
 - 256 nested function calls;
