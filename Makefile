@@ -1,5 +1,7 @@
 CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -pedantic
+SOURCES := src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c
+HEADERS := $(wildcard src/*.h)
 
 ifeq ($(OS),Windows_NT)
 TARGET := newt.exe
@@ -11,8 +13,8 @@ endif
 
 all: $(TARGET)
 
-$(TARGET): src/main.c
-	$(CC) $(CFLAGS) -o $(TARGET) src/main.c
+$(TARGET): $(SOURCES) $(HEADERS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES) -lm
 
 test: $(TARGET)
 ifeq ($(OS),Windows_NT)

@@ -9,7 +9,7 @@ This repository is a small v1 checkpoint: the core language can run useful begin
 Newt currently builds with GCC:
 
 ```sh
-gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c
+gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c -lm
 ```
 
 Or use the small Makefile:
@@ -382,7 +382,12 @@ newt/
     language.md
   examples/
   src/
-    main.c
+    main.c          command line: --run, --tokens, --parse
+    common.h        shared includes and limits
+    lexer.c/.h      source text -> tokens
+    parser.c/.h     tokens -> statement and expression trees
+    interpreter.c/.h  runs the trees
+    builtins.c/.h   built-in functions (files, text, lists, math)
   README.md
   TESTING.md
   regression_tests.bat
