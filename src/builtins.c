@@ -76,6 +76,7 @@ int call_file_read(Interpreter *interpreter, Expr *call, Value *value) {
                         path)) {
         return 0;
     }
+    value_release(interpreter, path_value);
 
     file = fopen(path, "rb");
     if (file == NULL) {
@@ -167,6 +168,7 @@ int call_file_write(Interpreter *interpreter,
                         path)) {
         return 0;
     }
+    value_release(interpreter, path_value);
     if (!eval_expression(interpreter, text_expression, &text_value)) {
         return 0;
     }
@@ -200,6 +202,7 @@ int call_file_write(Interpreter *interpreter,
                            1,
                            (size_t)text_length,
                            file);
+    value_release(interpreter, text_value);
     if (bytes_written != (size_t)text_length) {
         fclose(file);
         runtime_error(interpreter, call->token, "could not write complete file text");
@@ -313,9 +316,11 @@ int call_text(Interpreter *interpreter, Expr *call, Value *value) {
     }
 
     if (value == NULL) {
+        value_release(interpreter, argument_value);
         return 1;
     }
     if (argument_value.type == VALUE_STRING) {
+        /* Hand the argument's reference straight to the caller. */
         *value = argument_value;
         return 1;
     }
@@ -424,6 +429,7 @@ int call_len(Interpreter *interpreter, Expr *call, Value *value) {
     if (value != NULL) {
         *value = make_number_value((double)string_content_length(argument));
     }
+    value_release(interpreter, argument);
     return 1;
 }
 
@@ -450,6 +456,7 @@ int call_length(Interpreter *interpreter, Expr *call, Value *value) {
     if (value != NULL) {
         *value = make_number_value((double)argument.list->count);
     }
+    value_release(interpreter, argument);
     return 1;
 }
 
@@ -528,8 +535,10 @@ int call_append(Interpreter *interpreter, Expr *call, Value *value) {
         list_value.list->capacity = new_capacity;
     }
 
+    /* The appended value's reference moves into the list. */
     list_value.list->elements[list_value.list->count] = appended_value;
     list_value.list->count++;
+    value_release(interpreter, list_value);
     if (value != NULL) {
         *value = make_bool_value(1);
     }
@@ -589,6 +598,8 @@ int call_contains(Interpreter *interpreter, Expr *call, Value *value) {
         }
     }
 
+    value_release(interpreter, text_value);
+    value_release(interpreter, search_value);
     if (value != NULL) {
         *value = make_bool_value(found);
     }
@@ -624,6 +635,7 @@ int call_change_case(Interpreter *interpreter,
         return 0;
     }
     if (value == NULL) {
+        value_release(interpreter, argument);
         return 1;
     }
 
@@ -650,6 +662,7 @@ int call_change_case(Interpreter *interpreter,
     }
     characters[content_length + 1] = '"';
     characters[content_length + 2] = '\0';
+    value_release(interpreter, argument);
     return make_runtime_string(interpreter,
                                call->token,
                                characters,
@@ -689,6 +702,7 @@ int call_trim(Interpreter *interpreter, Expr *call, Value *value) {
         return 0;
     }
     if (value == NULL) {
+        value_release(interpreter, argument);
         return 1;
     }
 
@@ -707,11 +721,17 @@ int call_trim(Interpreter *interpreter, Expr *call, Value *value) {
         *value = argument;
         return 1;
     }
-    return make_string_from_content(interpreter,
-                                    call->token,
-                                    argument.string.start + 1 + start,
-                                    end - start,
-                                    value);
+    {
+        /* Copy the trimmed text before dropping the argument. */
+        int succeeded = make_string_from_content(interpreter,
+                                                 call->token,
+                                                 argument.string.start + 1 + start,
+                                                 end - start,
+                                                 value);
+
+        value_release(interpreter, argument);
+        return succeeded;
+    }
 }
 
 static int get_number_argument(Interpreter *interpreter,

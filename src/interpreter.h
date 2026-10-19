@@ -12,16 +12,33 @@ typedef enum {
     VALUE_LIST
 } ValueType;
 typedef struct Value Value;
+
+/* Heap strings and lists are reference counted. Every stored copy (a
+   variable, a list element) and every temporary returned by
+   eval_expression owns one reference. Live objects are also linked into a
+   registry so anything still alive at exit (such as a list that contains
+   itself) is freed. */
+typedef struct StringObject {
+    int ref_count;
+    char *characters;
+    struct StringObject *previous;
+    struct StringObject *next;
+} StringObject;
 typedef struct ListValue {
     Value *elements;
     int count;
     int capacity;
+    int ref_count;
+    struct ListValue *previous;
+    struct ListValue *next;
 } ListValue;
 struct Value {
     ValueType type;
     double number;
     int boolean;
     Token string;
+    /* NULL when the string points into the source text. */
+    StringObject *string_object;
     ListValue *list;
 };
 typedef struct {
@@ -52,16 +69,41 @@ typedef struct {
     /* Script arguments borrow the argv strings owned by the C runtime. */
     int script_argument_count;
     char **script_arguments;
-    char *runtime_strings[NEWT_MAX_RUNTIME_STRINGS];
-    int runtime_string_count;
-    ListValue *runtime_lists[NEWT_MAX_RUNTIME_LISTS];
-    int runtime_list_count;
+    StringObject *live_strings;
+    ListValue *live_lists;
+    /* Work stack used to free nested lists without recursion. */
+    ListValue **release_stack;
+    int release_stack_count;
+    int release_stack_capacity;
     int had_error;
 } Interpreter;
 
 Value make_number_value(double number);
 
 Value make_bool_value(int boolean);
+
+void value_retain_object(Value value);
+
+void value_release_object(Interpreter *interpreter, Value value);
+
+/* Numbers, booleans, and strings that point into the source own nothing,
+   so these inline checks skip the function call for them. */
+static inline int value_has_object(const Value *value) {
+    return (value->type == VALUE_STRING && value->string_object != NULL) ||
+           value->type == VALUE_LIST;
+}
+
+static inline void value_retain(Value value) {
+    if (value_has_object(&value)) {
+        value_retain_object(value);
+    }
+}
+
+static inline void value_release(Interpreter *interpreter, Value value) {
+    if (value_has_object(&value)) {
+        value_release_object(interpreter, value);
+    }
+}
 
 void runtime_error(Interpreter *interpreter, Token token, const char *message);
 

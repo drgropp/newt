@@ -237,11 +237,11 @@ The preview interpreter uses fixed-size internal storage. Current hard limits in
 - 256 parsed statements and 1,024 parsed expressions per source file;
 - 1,024 parsed call arguments in total;
 - 1,024 parsed list elements in total;
-- 1,024 runtime-created strings in one program run;
-- 1,024 runtime-created lists in one program run;
 - file paths shorter than 1,024 bytes for file built-ins.
 
 Programs that exceed a checked limit report an error. These limits are implementation constraints, not language goals.
+
+Strings and lists created while a program runs are reference counted and freed as soon as nothing refers to them. A list that contains itself, directly or through other lists, is freed when the program ends.
 
 ## Known limitations and non-features
 

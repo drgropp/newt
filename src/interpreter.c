@@ -14,6 +14,7 @@ Value make_number_value(double number) {
     value.string.line = 0;
     value.string.column = 0;
     value.string.error_message = NULL;
+    value.string_object = NULL;
     value.list = NULL;
     return value;
 }
@@ -25,6 +26,7 @@ static Value make_string_value(Token string) {
     value.number = 0;
     value.boolean = 0;
     value.string = string;
+    value.string_object = NULL;
     value.list = NULL;
     return value;
 }
@@ -40,6 +42,7 @@ Value make_bool_value(int boolean) {
     value.string.line = 0;
     value.string.column = 0;
     value.string.error_message = NULL;
+    value.string_object = NULL;
     value.list = NULL;
     return value;
 }
@@ -55,6 +58,7 @@ static Value make_list_value(ListValue *list) {
     value.string.line = 0;
     value.string.column = 0;
     value.string.error_message = NULL;
+    value.string_object = NULL;
     value.list = list;
     return value;
 }
@@ -152,6 +156,112 @@ void runtime_name_error(Interpreter *interpreter, Token token, const char *messa
     runtime_error(interpreter, token, detailed_message);
 }
 
+void value_retain_object(Value value) {
+    if (value.type == VALUE_STRING && value.string_object != NULL) {
+        value.string_object->ref_count++;
+    } else if (value.type == VALUE_LIST) {
+        value.list->ref_count++;
+    }
+}
+
+static void free_string_object(Interpreter *interpreter, StringObject *object) {
+    if (object->previous != NULL) {
+        object->previous->next = object->next;
+    } else {
+        interpreter->live_strings = object->next;
+    }
+    if (object->next != NULL) {
+        object->next->previous = object->previous;
+    }
+    free(object->characters);
+    free(object);
+}
+
+static void unlink_list(Interpreter *interpreter, ListValue *list) {
+    if (list->previous != NULL) {
+        list->previous->next = list->next;
+    } else {
+        interpreter->live_lists = list->next;
+    }
+    if (list->next != NULL) {
+        list->next->previous = list->previous;
+    }
+}
+
+static void link_list(Interpreter *interpreter, ListValue *list) {
+    list->ref_count = 1;
+    list->previous = NULL;
+    list->next = interpreter->live_lists;
+    if (interpreter->live_lists != NULL) {
+        interpreter->live_lists->previous = list;
+    }
+    interpreter->live_lists = list;
+}
+
+static int push_release_stack(Interpreter *interpreter, ListValue *list) {
+    if (interpreter->release_stack_count == interpreter->release_stack_capacity) {
+        int new_capacity = interpreter->release_stack_capacity == 0
+                               ? 64
+                               : interpreter->release_stack_capacity * 2;
+        ListValue **grown;
+
+        if (interpreter->release_stack_capacity > INT_MAX / 2) {
+            return 0;
+        }
+        grown = realloc(interpreter->release_stack,
+                        (size_t)new_capacity * sizeof(ListValue *));
+        if (grown == NULL) {
+            return 0;
+        }
+        interpreter->release_stack = grown;
+        interpreter->release_stack_capacity = new_capacity;
+    }
+    interpreter->release_stack[interpreter->release_stack_count++] = list;
+    return 1;
+}
+
+/* Drop one reference. Lists whose count reaches zero go on a work stack
+   instead of being freed recursively, so deeply nested lists cannot
+   overflow the C stack. If the stack cannot grow, the list simply stays in
+   the registry and is freed when the program ends. */
+void value_release_object(Interpreter *interpreter, Value value) {
+    if (value.type == VALUE_STRING && value.string_object != NULL) {
+        if (--value.string_object->ref_count == 0) {
+            free_string_object(interpreter, value.string_object);
+        }
+        return;
+    }
+    if (value.type != VALUE_LIST) {
+        return;
+    }
+    if (--value.list->ref_count > 0 || !push_release_stack(interpreter, value.list)) {
+        return;
+    }
+
+    while (interpreter->release_stack_count > 0) {
+        ListValue *list = interpreter->release_stack[--interpreter->release_stack_count];
+        int i;
+
+        for (i = 0; i < list->count; i++) {
+            Value element = list->elements[i];
+
+            if (element.type == VALUE_STRING && element.string_object != NULL) {
+                if (--element.string_object->ref_count == 0) {
+                    free_string_object(interpreter, element.string_object);
+                }
+            } else if (element.type == VALUE_LIST) {
+                if (--element.list->ref_count == 0 &&
+                    !push_release_stack(interpreter, element.list)) {
+                    element.list->ref_count = 1;
+                }
+            }
+        }
+        unlink_list(interpreter, list);
+        free(list->elements);
+        free(list);
+    }
+}
+
 int make_runtime_string(Interpreter *interpreter,
                                Token source,
                                char *characters,
@@ -159,27 +269,39 @@ int make_runtime_string(Interpreter *interpreter,
                                Value *value) {
     Token string = source;
 
-    /* The interpreter owns this heap buffer and frees it after the run. */
+    StringObject *object;
+
+    /* The new string starts with one reference, owned by the caller. */
     if (content_length < 0 || content_length > INT_MAX - 2) {
         free(characters);
         runtime_error(interpreter, source, "runtime string is too long");
         return 0;
     }
-    if (interpreter->runtime_string_count >= NEWT_MAX_RUNTIME_STRINGS) {
+    if (value == NULL) {
         free(characters);
-        runtime_error(interpreter, source, "too many runtime strings");
+        return 1;
+    }
+    object = malloc(sizeof(StringObject));
+    if (object == NULL) {
+        free(characters);
+        runtime_error(interpreter, source, "not enough memory for string");
         return 0;
     }
+    object->ref_count = 1;
+    object->characters = characters;
+    object->previous = NULL;
+    object->next = interpreter->live_strings;
+    if (interpreter->live_strings != NULL) {
+        interpreter->live_strings->previous = object;
+    }
+    interpreter->live_strings = object;
 
     string.type = TOKEN_STRING;
     string.start = characters;
     string.length = content_length + 2;
     string.error_message = NULL;
-    interpreter->runtime_strings[interpreter->runtime_string_count] = characters;
-    interpreter->runtime_string_count++;
-    if (value != NULL) {
-        *value = make_string_value(string);
-    }
+    *value = make_string_value(string);
+    value->string_object = object;
     return 1;
 }
 
@@ -375,6 +497,7 @@ static int read_input_number(Interpreter *interpreter, Token prompt, double *num
                decoded_prompt.string.length - 2,
                decoded_prompt.string.start + 1);
     }
+    value_release(interpreter, decoded_prompt);
     fflush(stdout);
 
     if (scanf("%lf", number) != 1) {
@@ -432,6 +555,109 @@ static int resolve_list_index(Interpreter *interpreter,
     return 1;
 }
 
+static int eval_binary_operator(Interpreter *interpreter,
+                                Expr *expr,
+                                Value left,
+                                Value right,
+                                Value *value) {
+    switch (expr->token.type) {
+        case TOKEN_EQUAL_EQUAL:
+            if (left.type != right.type) {
+                *value = make_bool_value(0);
+                return 1;
+            }
+            if (left.type == VALUE_STRING) {
+                *value = make_bool_value(string_values_equal(left, right));
+                return 1;
+            }
+            if (left.type == VALUE_BOOL) {
+                *value = make_bool_value(left.boolean == right.boolean);
+                return 1;
+            }
+            if (left.type == VALUE_LIST) {
+                runtime_error(interpreter, expr->token, "list comparison is not supported");
+                return 0;
+            }
+            *value = make_bool_value(left.number == right.number);
+            return 1;
+        case TOKEN_BANG_EQUAL:
+            if (left.type != right.type) {
+                *value = make_bool_value(1);
+                return 1;
+            }
+            if (left.type == VALUE_STRING) {
+                *value = make_bool_value(!string_values_equal(left, right));
+                return 1;
+            }
+            if (left.type == VALUE_BOOL) {
+                *value = make_bool_value(left.boolean != right.boolean);
+                return 1;
+            }
+            if (left.type == VALUE_LIST) {
+                runtime_error(interpreter, expr->token, "list comparison is not supported");
+                return 0;
+            }
+            *value = make_bool_value(left.number != right.number);
+            return 1;
+        default:
+            break;
+    }
+
+    if (expr->token.type == TOKEN_PLUS &&
+        left.type == VALUE_STRING &&
+        right.type == VALUE_STRING) {
+        return concatenate_strings(interpreter,
+                                   expr->token,
+                                   left,
+                                   right,
+                                   value);
+    }
+
+    if (left.type != VALUE_NUMBER || right.type != VALUE_NUMBER) {
+        if (left.type == VALUE_BOOL || right.type == VALUE_BOOL) {
+            runtime_error(interpreter, expr->token, "numeric operators require numbers, not booleans");
+            return 0;
+        }
+
+        runtime_error(interpreter, expr->token, "numeric operators require numbers");
+        return 0;
+    }
+
+    switch (expr->token.type) {
+        case TOKEN_PLUS:
+            *value = make_number_value(left.number + right.number);
+            return 1;
+        case TOKEN_MINUS:
+            *value = make_number_value(left.number - right.number);
+            return 1;
+        case TOKEN_STAR:
+            *value = make_number_value(left.number * right.number);
+            return 1;
+        case TOKEN_SLASH:
+            if (right.number == 0) {
+                runtime_error(interpreter, expr->token, "division by zero");
+                return 0;
+            }
+            *value = make_number_value(left.number / right.number);
+            return 1;
+        case TOKEN_LESS:
+            *value = make_bool_value(left.number < right.number);
+            return 1;
+        case TOKEN_LESS_EQUAL:
+            *value = make_bool_value(left.number <= right.number);
+            return 1;
+        case TOKEN_GREATER:
+            *value = make_bool_value(left.number > right.number);
+            return 1;
+        case TOKEN_GREATER_EQUAL:
+            *value = make_bool_value(left.number >= right.number);
+            return 1;
+        default:
+            runtime_error(interpreter, expr->token, "unsupported runtime operator");
+            return 0;
+    }
+}
+
 int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
     Value left;
     Value right;
@@ -483,6 +709,7 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                 return 0;
             }
             *value = variable->value;
+            value_retain(*value);
             return 1;
         }
         case EXPR_STRING:
@@ -493,10 +720,6 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             ListValue *list;
             int i;
 
-            if (interpreter->runtime_list_count >= NEWT_MAX_RUNTIME_LISTS) {
-                runtime_error(interpreter, expr->token, "too many runtime lists");
-                return 0;
-            }
             list = malloc(sizeof(ListValue));
             if (list == NULL) {
                 runtime_error(interpreter, expr->token, "not enough memory for list");
@@ -522,14 +745,7 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                     return 0;
                 }
             }
-            if (interpreter->runtime_list_count >= NEWT_MAX_RUNTIME_LISTS) {
-                free(list->elements);
-                free(list);
-                runtime_error(interpreter, expr->token, "too many runtime lists");
-                return 0;
-            }
-            interpreter->runtime_lists[interpreter->runtime_list_count] = list;
-            interpreter->runtime_list_count++;
+            link_list(interpreter, list);
             *value = make_list_value(list);
             return 1;
         }
@@ -547,7 +763,10 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                                     &index)) {
                 return 0;
             }
+            /* Take the element's reference before dropping the list's. */
             *value = list.list->elements[index];
+            value_retain(*value);
+            value_release(interpreter, list);
             return 1;
         }
         case EXPR_UNARY:
@@ -637,102 +856,12 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             if (!eval_expression(interpreter, expr->right, &right)) {
                 return 0;
             }
+            {
+                int succeeded = eval_binary_operator(interpreter, expr, left, right, value);
 
-            switch (expr->token.type) {
-                case TOKEN_EQUAL_EQUAL:
-                    if (left.type != right.type) {
-                        *value = make_bool_value(0);
-                        return 1;
-                    }
-                    if (left.type == VALUE_STRING) {
-                        *value = make_bool_value(string_values_equal(left, right));
-                        return 1;
-                    }
-                    if (left.type == VALUE_BOOL) {
-                        *value = make_bool_value(left.boolean == right.boolean);
-                        return 1;
-                    }
-                    if (left.type == VALUE_LIST) {
-                        runtime_error(interpreter, expr->token, "list comparison is not supported");
-                        return 0;
-                    }
-                    *value = make_bool_value(left.number == right.number);
-                    return 1;
-                case TOKEN_BANG_EQUAL:
-                    if (left.type != right.type) {
-                        *value = make_bool_value(1);
-                        return 1;
-                    }
-                    if (left.type == VALUE_STRING) {
-                        *value = make_bool_value(!string_values_equal(left, right));
-                        return 1;
-                    }
-                    if (left.type == VALUE_BOOL) {
-                        *value = make_bool_value(left.boolean != right.boolean);
-                        return 1;
-                    }
-                    if (left.type == VALUE_LIST) {
-                        runtime_error(interpreter, expr->token, "list comparison is not supported");
-                        return 0;
-                    }
-                    *value = make_bool_value(left.number != right.number);
-                    return 1;
-                default:
-                    break;
-            }
-
-            if (expr->token.type == TOKEN_PLUS &&
-                left.type == VALUE_STRING &&
-                right.type == VALUE_STRING) {
-                return concatenate_strings(interpreter,
-                                           expr->token,
-                                           left,
-                                           right,
-                                           value);
-            }
-
-            if (left.type != VALUE_NUMBER || right.type != VALUE_NUMBER) {
-                if (left.type == VALUE_BOOL || right.type == VALUE_BOOL) {
-                    runtime_error(interpreter, expr->token, "numeric operators require numbers, not booleans");
-                    return 0;
-                }
-
-                runtime_error(interpreter, expr->token, "numeric operators require numbers");
-                return 0;
-            }
-
-            switch (expr->token.type) {
-                case TOKEN_PLUS:
-                    *value = make_number_value(left.number + right.number);
-                    return 1;
-                case TOKEN_MINUS:
-                    *value = make_number_value(left.number - right.number);
-                    return 1;
-                case TOKEN_STAR:
-                    *value = make_number_value(left.number * right.number);
-                    return 1;
-                case TOKEN_SLASH:
-                    if (right.number == 0) {
-                        runtime_error(interpreter, expr->token, "division by zero");
-                        return 0;
-                    }
-                    *value = make_number_value(left.number / right.number);
-                    return 1;
-                case TOKEN_LESS:
-                    *value = make_bool_value(left.number < right.number);
-                    return 1;
-                case TOKEN_LESS_EQUAL:
-                    *value = make_bool_value(left.number <= right.number);
-                    return 1;
-                case TOKEN_GREATER:
-                    *value = make_bool_value(left.number > right.number);
-                    return 1;
-                case TOKEN_GREATER_EQUAL:
-                    *value = make_bool_value(left.number >= right.number);
-                    return 1;
-                default:
-                    runtime_error(interpreter, expr->token, "unsupported runtime operator");
-                    return 0;
+                value_release(interpreter, left);
+                value_release(interpreter, right);
+                return succeeded;
             }
         case EXPR_TRUE:
             *value = make_bool_value(1);
@@ -848,7 +977,17 @@ static int print_runtime_expression(Interpreter *interpreter, Expr *expr) {
     }
 
     print_value(value);
+    value_release(interpreter, value);
     return 1;
+}
+
+/* Leave a scope: drop the references held by its variables. */
+static void pop_variables(Interpreter *interpreter, int variable_start) {
+    while (interpreter->variable_count > variable_start) {
+        interpreter->variable_count--;
+        value_release(interpreter,
+                      interpreter->variables[interpreter->variable_count].value);
+    }
 }
 
 static int execute_statement(Interpreter *interpreter, Stmt *stmt);
@@ -880,7 +1019,7 @@ static int execute_scoped_statement_list(Interpreter *interpreter,
 
     interpreter->scope_depth++;
     succeeded = execute_statement_list(interpreter, statements, count);
-    interpreter->variable_count = variable_start;
+    pop_variables(interpreter, variable_start);
     interpreter->scope_depth--;
 
     return succeeded;
@@ -1097,7 +1236,7 @@ static int call_function(Interpreter *interpreter,
         returned_value = interpreter->return_value;
     }
 
-    interpreter->variable_count = variable_start;
+    pop_variables(interpreter, variable_start);
     interpreter->scope_depth--;
     interpreter->call_depth--;
     interpreter->is_returning = previous_returning;
@@ -1109,8 +1248,12 @@ static int call_function(Interpreter *interpreter,
     if (!succeeded) {
         return 0;
     }
+    /* The returned value's reference passes to the caller, or is dropped
+       when the call is used as a statement. */
     if (value != NULL) {
         *value = returned_value;
+    } else {
+        value_release(interpreter, returned_value);
     }
 
     return 1;
@@ -1182,7 +1325,12 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
             }
-            variable->value = value;
+            {
+                Value old_value = variable->value;
+
+                variable->value = value;
+                value_release(interpreter, old_value);
+            }
             return 1;
         }
         case STMT_INDEX_ASSIGN: {
@@ -1212,7 +1360,13 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
             }
-            list.list->elements[index] = value;
+            {
+                Value old_value = list.list->elements[index];
+
+                list.list->elements[index] = value;
+                value_release(interpreter, old_value);
+            }
+            value_release(interpreter, list);
             return 1;
         }
 
@@ -1221,12 +1375,15 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
         case STMT_IF: {
             int *branch;
             int branch_count;
+            int truthy;
 
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
             }
 
-            if (value_is_truthy(value)) {
+            truthy = value_is_truthy(value);
+            value_release(interpreter, value);
+            if (truthy) {
                 branch = stmt->then_statements;
                 branch_count = stmt->then_count;
             } else if (stmt->has_else) {
@@ -1255,8 +1412,13 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                     break;
                 }
 
-                if (!value_is_truthy(value)) {
-                    break;
+                {
+                    int truthy = value_is_truthy(value);
+
+                    value_release(interpreter, value);
+                    if (!truthy) {
+                        break;
+                    }
                 }
 
                 iterations++;
@@ -1306,6 +1468,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 int variable_start = interpreter->variable_count;
 
                 interpreter->scope_depth++;
+                value_retain(iterable.list->elements[index]);
                 if (!define_variable(interpreter,
                                      stmt->name,
                                      iterable.list->elements[index],
@@ -1316,7 +1479,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                                                    stmt->body_count)) {
                     succeeded = 0;
                 }
-                interpreter->variable_count = variable_start;
+                pop_variables(interpreter, variable_start);
                 interpreter->scope_depth--;
 
                 if (!succeeded || interpreter->is_returning) {
@@ -1332,6 +1495,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 }
             }
             interpreter->loop_depth--;
+            value_release(interpreter, iterable);
             return succeeded && !interpreter->had_error;
         }
     }
@@ -1368,8 +1532,11 @@ int run_program(const char *path,
     interpreter.return_value = make_number_value(0);
     interpreter.script_argument_count = script_argument_count;
     interpreter.script_arguments = script_arguments;
-    interpreter.runtime_string_count = 0;
-    interpreter.runtime_list_count = 0;
+    interpreter.live_strings = NULL;
+    interpreter.live_lists = NULL;
+    interpreter.release_stack = NULL;
+    interpreter.release_stack_count = 0;
+    interpreter.release_stack_capacity = 0;
     interpreter.had_error = 0;
 
     {
@@ -1397,13 +1564,23 @@ int run_program(const char *path,
     {
         int succeeded = !interpreter.had_error;
 
-        for (i = 0; i < interpreter.runtime_list_count; i++) {
-            free(interpreter.runtime_lists[i]->elements);
-            free(interpreter.runtime_lists[i]);
+        /* Free whatever is still alive: values held by top-level variables,
+           lists that reference themselves, and anything left by an error. */
+        while (interpreter.live_lists != NULL) {
+            ListValue *list = interpreter.live_lists;
+
+            interpreter.live_lists = list->next;
+            free(list->elements);
+            free(list);
         }
-        for (i = 0; i < interpreter.runtime_string_count; i++) {
-            free(interpreter.runtime_strings[i]);
+        while (interpreter.live_strings != NULL) {
+            StringObject *object = interpreter.live_strings;
+
+            interpreter.live_strings = object->next;
+            free(object->characters);
+            free(object);
         }
+        free(interpreter.release_stack);
         free(interpreter.variables);
         return succeeded;
     }
