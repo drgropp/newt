@@ -39,7 +39,7 @@ static void parser_advance(Parser *parser) {
     parser->previous = parser->current;
     parser->current = next_token(&parser->lexer);
 
-    if (parser->current.type == TOKEN_ERROR) {
+    if (parser->current.type == TOKEN_ERROR && !parser->had_error) {
         print_lexer_error(parser->path, parser->current);
         parser->had_error = 1;
     }
