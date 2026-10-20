@@ -2,16 +2,44 @@
 
 #include "parser.h"
 
+#define EXPR_BLOCK_SIZE 256
+
+struct ExprBlock {
+    ExprBlock *next;
+    Expr items[EXPR_BLOCK_SIZE];
+};
+
 void parser_init(Parser *parser, const char *path, const char *source) {
     lexer_init(&parser->lexer, source);
     parser->path = path;
     parser->had_error = 0;
+    parser->expr_blocks = NULL;
+    parser->expr_block_used = 0;
     parser->expression_count = 0;
+    parser->statements = NULL;
     parser->statement_count = 0;
+    parser->statement_capacity = 0;
+    parser->parameters = NULL;
     parser->parameter_count = 0;
+    parser->parameter_capacity = 0;
+    parser->call_arguments = NULL;
     parser->call_argument_count = 0;
+    parser->call_argument_capacity = 0;
+    parser->list_elements = NULL;
     parser->list_element_count = 0;
+    parser->list_element_capacity = 0;
+    parser->top_level_statements = NULL;
     parser->top_level_statement_count = 0;
+    parser->top_level_statement_capacity = 0;
+    parser->block_items = NULL;
+    parser->block_item_count = 0;
+    parser->block_item_capacity = 0;
+    parser->block_scratch = NULL;
+    parser->block_scratch_count = 0;
+    parser->block_scratch_capacity = 0;
+    parser->element_scratch = NULL;
+    parser->element_scratch_count = 0;
+    parser->element_scratch_capacity = 0;
     parser->current.type = TOKEN_EOF;
     parser->current.start = source;
     parser->current.length = 0;
@@ -69,15 +97,91 @@ static void parser_skip_newlines(Parser *parser) {
     }
 }
 
+void parser_free(Parser *parser) {
+    while (parser->expr_blocks != NULL) {
+        ExprBlock *block = parser->expr_blocks;
+
+        parser->expr_blocks = block->next;
+        free(block);
+    }
+    free(parser->statements);
+    free(parser->parameters);
+    free(parser->call_arguments);
+    free(parser->list_elements);
+    free(parser->top_level_statements);
+    free(parser->block_items);
+    free(parser->block_scratch);
+    free(parser->element_scratch);
+    parser->statements = NULL;
+    parser->parameters = NULL;
+    parser->call_arguments = NULL;
+    parser->list_elements = NULL;
+    parser->top_level_statements = NULL;
+    parser->block_items = NULL;
+    parser->block_scratch = NULL;
+    parser->element_scratch = NULL;
+}
+
+/* Make room for `needed` more items in a growable array, doubling its
+   capacity. On failure it reports a parse error at `token` and returns 0. */
+static int ensure_capacity(Parser *parser,
+                           void **items,
+                           int *capacity,
+                           int count,
+                           int needed,
+                           size_t item_size,
+                           Token token) {
+    int new_capacity;
+    void *grown;
+
+    if (count > INT_MAX - needed) {
+        parser_error(parser, token, "program is too large");
+        return 0;
+    }
+    if (count + needed <= *capacity) {
+        return 1;
+    }
+
+    new_capacity = *capacity == 0 ? 64 : *capacity;
+    while (new_capacity < count + needed) {
+        if (new_capacity > INT_MAX / 2) {
+            new_capacity = count + needed;
+            break;
+        }
+        new_capacity *= 2;
+    }
+    if ((size_t)new_capacity > (size_t)-1 / item_size) {
+        parser_error(parser, token, "program is too large");
+        return 0;
+    }
+
+    grown = realloc(*items, (size_t)new_capacity * item_size);
+    if (grown == NULL) {
+        parser_error(parser, token, "not enough memory to parse program");
+        return 0;
+    }
+    *items = grown;
+    *capacity = new_capacity;
+    return 1;
+}
+
 static Expr *new_expr(Parser *parser, ExprKind kind, Token token) {
     Expr *expr;
 
-    if (parser->expression_count >= 1024) {
-        parser_error(parser, token, "too many expressions");
-        return NULL;
+    if (parser->expr_blocks == NULL || parser->expr_block_used == EXPR_BLOCK_SIZE) {
+        ExprBlock *block = malloc(sizeof(ExprBlock));
+
+        if (block == NULL) {
+            parser_error(parser, token, "not enough memory to parse program");
+            return NULL;
+        }
+        block->next = parser->expr_blocks;
+        parser->expr_blocks = block;
+        parser->expr_block_used = 0;
     }
 
-    expr = &parser->expressions[parser->expression_count];
+    expr = &parser->expr_blocks->items[parser->expr_block_used];
+    parser->expr_block_used++;
     parser->expression_count++;
     expr->kind = kind;
     expr->token = token;
@@ -93,20 +197,35 @@ static Expr *new_expr(Parser *parser, ExprKind kind, Token token) {
 static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expression) {
     Stmt *stmt;
 
-    if (parser->statement_count >= 256) {
-        parser_error(parser, name, "too many statements");
+    /* The statement array may move when it grows, so callers keep a
+       statement's index (stmt->index), never its address, past the next
+       new_stmt call. */
+    if (!ensure_capacity(parser,
+                         (void **)&parser->statements,
+                         &parser->statement_capacity,
+                         parser->statement_count,
+                         1,
+                         sizeof(Stmt),
+                         name)) {
         return NULL;
     }
 
     stmt = &parser->statements[parser->statement_count];
+    stmt->index = parser->statement_count;
     parser->statement_count++;
     stmt->kind = kind;
     stmt->name = name;
     stmt->expression = expression;
     stmt->target = NULL;
+    stmt->then_statements = NULL;
+    stmt->then_start = 0;
     stmt->then_count = 0;
+    stmt->else_statements = NULL;
+    stmt->else_start = 0;
     stmt->else_count = 0;
     stmt->has_else = 0;
+    stmt->body_statements = NULL;
+    stmt->body_start = 0;
     stmt->body_count = 0;
     stmt->parameter_start = 0;
     stmt->parameter_count = 0;
@@ -114,7 +233,8 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
 }
 
 static int statement_index(Parser *parser, Stmt *stmt) {
-    return (int)(stmt - parser->statements);
+    (void)parser;
+    return stmt->index;
 }
 
 
@@ -123,8 +243,13 @@ static void add_top_level_statement(Parser *parser, Stmt *stmt) {
         return;
     }
 
-    if (parser->top_level_statement_count >= 256) {
-        parser_error(parser, stmt->name, "too many statements");
+    if (!ensure_capacity(parser,
+                         (void **)&parser->top_level_statements,
+                         &parser->top_level_statement_capacity,
+                         parser->top_level_statement_count,
+                         1,
+                         sizeof(int),
+                         stmt->name)) {
         return;
     }
 
@@ -169,8 +294,13 @@ static Expr *finish_function_call(Parser *parser, Token name) {
         return NULL;
     }
 
-    if (parser->call_argument_count + call->argument_count > 1024) {
-        parser_error(parser, name, "too many function call arguments");
+    if (!ensure_capacity(parser,
+                         (void **)&parser->call_arguments,
+                         &parser->call_argument_capacity,
+                         parser->call_argument_count,
+                         call->argument_count,
+                         sizeof(Expr *),
+                         name)) {
         return NULL;
     }
     call->argument_start = parser->call_argument_count;
@@ -184,7 +314,10 @@ static Expr *finish_function_call(Parser *parser, Token name) {
 
 static Expr *parse_list_literal(Parser *parser, Token opening_bracket) {
     Expr *list = new_expr(parser, EXPR_LIST, opening_bracket);
-    Expr *elements[1024];
+    /* Elements collect on a scratch stack; a nested list literal pushes its
+       own elements above ours and pops them before we continue, so ours stay
+       contiguous from `base`. */
+    int base = parser->element_scratch_count;
     int i;
 
     if (list == NULL) {
@@ -193,18 +326,22 @@ static Expr *parse_list_literal(Parser *parser, Token opening_bracket) {
 
     if (parser->current.type != TOKEN_RIGHT_BRACKET) {
         do {
-            Expr *element;
+            Expr *element = parse_expression(parser);
 
-            if (list->element_count >= 1024) {
-                parser_error(parser, parser->current, "list literal has too many elements");
-                return NULL;
-            }
-
-            element = parse_expression(parser);
             if (element == NULL || parser->had_error) {
                 return NULL;
             }
-            elements[list->element_count] = element;
+            if (!ensure_capacity(parser,
+                                 (void **)&parser->element_scratch,
+                                 &parser->element_scratch_capacity,
+                                 parser->element_scratch_count,
+                                 1,
+                                 sizeof(Expr *),
+                                 opening_bracket)) {
+                return NULL;
+            }
+            parser->element_scratch[parser->element_scratch_count] = element;
+            parser->element_scratch_count++;
             list->element_count++;
         } while (parser_match(parser, TOKEN_COMMA));
     }
@@ -214,15 +351,21 @@ static Expr *parse_list_literal(Parser *parser, Token opening_bracket) {
         return NULL;
     }
 
-    if (parser->list_element_count + list->element_count > 1024) {
-        parser_error(parser, opening_bracket, "too many list elements");
+    if (!ensure_capacity(parser,
+                         (void **)&parser->list_elements,
+                         &parser->list_element_capacity,
+                         parser->list_element_count,
+                         list->element_count,
+                         sizeof(Expr *),
+                         opening_bracket)) {
         return NULL;
     }
     list->element_start = parser->list_element_count;
     for (i = 0; i < list->element_count; i++) {
-        parser->list_elements[parser->list_element_count] = elements[i];
+        parser->list_elements[parser->list_element_count] = parser->element_scratch[base + i];
         parser->list_element_count++;
     }
+    parser->element_scratch_count = base;
 
     return list;
 }
@@ -772,7 +915,37 @@ static Stmt *parse_continue_statement(Parser *parser) {
     return new_stmt(parser, STMT_CONTINUE, continue_token, NULL);
 }
 
-static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int statements[256], int *count) {
+/* Append `count` statement indexes to the shared block pool and return
+   where they start, or -1 on failure. */
+static int store_block(Parser *parser, const int *indexes, int count, Token token) {
+    int start;
+    int i;
+
+    if (!ensure_capacity(parser,
+                         (void **)&parser->block_items,
+                         &parser->block_item_capacity,
+                         parser->block_item_count,
+                         count,
+                         sizeof(int),
+                         token)) {
+        return -1;
+    }
+    start = parser->block_item_count;
+    for (i = 0; i < count; i++) {
+        parser->block_items[start + i] = indexes[i];
+    }
+    parser->block_item_count += count;
+    return start;
+}
+
+/* Parse statements until a stop token. Child indexes collect on the block
+   scratch stack: a nested block pushes above ours and pops back before we
+   push again, so ours stay contiguous from `base`. At the end they are
+   copied into the block pool and popped. */
+static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, int *start, int *count) {
+    int base = parser->block_scratch_count;
+
+    *start = 0;
     *count = 0;
     parser_skip_newlines(parser);
 
@@ -782,25 +955,40 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
            parser->current.type != stop_two) {
         Stmt *stmt = parse_statement(parser);
         if (stmt != NULL) {
-            if (*count >= 256) {
-                parser_error(parser, stmt->name, "too many block statements");
+            if (!ensure_capacity(parser,
+                                 (void **)&parser->block_scratch,
+                                 &parser->block_scratch_capacity,
+                                 parser->block_scratch_count,
+                                 1,
+                                 sizeof(int),
+                                 stmt->name)) {
                 return;
             }
-            statements[*count] = statement_index(parser, stmt);
-            (*count)++;
+            parser->block_scratch[parser->block_scratch_count] = statement_index(parser, stmt);
+            parser->block_scratch_count++;
         }
         parser_skip_newlines(parser);
+    }
+    if (parser->had_error) {
+        return;
+    }
+
+    *count = parser->block_scratch_count - base;
+    *start = store_block(parser, parser->block_scratch + base, *count, parser->current);
+    parser->block_scratch_count = base;
+    if (*start < 0) {
+        *start = 0;
+        *count = 0;
     }
 }
 
 static Stmt *parse_function_declaration(Parser *parser) {
     Token name;
     Stmt *stmt;
-    int body_statements[256];
+    int body_start;
     int body_count;
     int parameter_start;
     int parameter_count = 0;
-    int i;
 
     parser_consume(parser, TOKEN_IDENT, "expected function name after 'fn'");
     if (parser->had_error) {
@@ -845,8 +1033,13 @@ static Stmt *parse_function_declaration(Parser *parser) {
                 }
             }
 
-            if (parser->parameter_count >= 256) {
-                parser_error(parser, parameter, "too many function parameters");
+            if (!ensure_capacity(parser,
+                                 (void **)&parser->parameters,
+                                 &parser->parameter_capacity,
+                                 parser->parameter_count,
+                                 1,
+                                 sizeof(Token),
+                                 parameter)) {
                 return NULL;
             }
             parser->parameters[parser->parameter_count] = parameter;
@@ -865,7 +1058,7 @@ static Stmt *parse_function_declaration(Parser *parser) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_END, TOKEN_END, body_statements, &body_count);
+    parse_block(parser, TOKEN_END, TOKEN_END, &body_start, &body_count);
     if (parser->had_error) {
         return NULL;
     }
@@ -885,9 +1078,7 @@ static Stmt *parse_function_declaration(Parser *parser) {
         return NULL;
     }
 
-    for (i = 0; i < body_count; i++) {
-        stmt->body_statements[i] = body_statements[i];
-    }
+    stmt->body_start = body_start;
     stmt->body_count = body_count;
     stmt->parameter_start = parameter_start;
     stmt->parameter_count = parameter_count;
@@ -897,12 +1088,11 @@ static Stmt *parse_function_declaration(Parser *parser) {
 static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
     Expr *condition;
     Stmt *stmt;
-    int then_statements[256];
+    int then_start;
     int then_count;
-    int else_statements[256];
+    int else_start = 0;
     int else_count = 0;
     int has_else = 0;
-    int i;
 
     if (parser->current.type == TOKEN_NEWLINE ||
         parser->current.type == TOKEN_EOF ||
@@ -925,7 +1115,7 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_ELSE, TOKEN_END, then_statements, &then_count);
+    parse_block(parser, TOKEN_ELSE, TOKEN_END, &then_start, &then_count);
     if (parser->had_error) {
         return NULL;
     }
@@ -939,7 +1129,14 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
                 return NULL;
             }
 
-            else_statements[0] = statement_index(parser, else_if_stmt);
+            {
+                int else_if_index = statement_index(parser, else_if_stmt);
+
+                else_start = store_block(parser, &else_if_index, 1, if_token);
+                if (else_start < 0) {
+                    return NULL;
+                }
+            }
             else_count = 1;
         } else {
             parser_consume_statement_end(parser);
@@ -947,7 +1144,7 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
                 return NULL;
             }
 
-            parse_block(parser, TOKEN_END, TOKEN_END, else_statements, &else_count);
+            parse_block(parser, TOKEN_END, TOKEN_END, &else_start, &else_count);
             if (parser->had_error) {
                 return NULL;
             }
@@ -971,13 +1168,9 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
         return NULL;
     }
 
-    for (i = 0; i < then_count; i++) {
-        stmt->then_statements[i] = then_statements[i];
-    }
-    for (i = 0; i < else_count; i++) {
-        stmt->else_statements[i] = else_statements[i];
-    }
+    stmt->then_start = then_start;
     stmt->then_count = then_count;
+    stmt->else_start = else_start;
     stmt->else_count = else_count;
     stmt->has_else = has_else;
     return stmt;
@@ -991,9 +1184,8 @@ static Stmt *parse_while_statement(Parser *parser) {
     Token while_token = parser->previous;
     Expr *condition;
     Stmt *stmt;
-    int body_statements[256];
+    int body_start;
     int body_count;
-    int i;
 
     condition = parse_expression(parser);
     if (parser->had_error) {
@@ -1005,7 +1197,7 @@ static Stmt *parse_while_statement(Parser *parser) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_END, TOKEN_END, body_statements, &body_count);
+    parse_block(parser, TOKEN_END, TOKEN_END, &body_start, &body_count);
     if (parser->had_error) {
         return NULL;
     }
@@ -1025,9 +1217,7 @@ static Stmt *parse_while_statement(Parser *parser) {
         return NULL;
     }
 
-    for (i = 0; i < body_count; i++) {
-        stmt->body_statements[i] = body_statements[i];
-    }
+    stmt->body_start = body_start;
     stmt->body_count = body_count;
     return stmt;
 }
@@ -1036,9 +1226,8 @@ static Stmt *parse_for_statement(Parser *parser) {
     Token name;
     Expr *iterable;
     Stmt *stmt;
-    int body_statements[256];
+    int body_start;
     int body_count;
-    int i;
 
     parser_consume(parser, TOKEN_IDENT, "expected loop variable after 'for'");
     if (parser->had_error) {
@@ -1067,7 +1256,7 @@ static Stmt *parse_for_statement(Parser *parser) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_END, TOKEN_END, body_statements, &body_count);
+    parse_block(parser, TOKEN_END, TOKEN_END, &body_start, &body_count);
     if (parser->had_error) {
         return NULL;
     }
@@ -1086,9 +1275,7 @@ static Stmt *parse_for_statement(Parser *parser) {
     if (stmt == NULL) {
         return NULL;
     }
-    for (i = 0; i < body_count; i++) {
-        stmt->body_statements[i] = body_statements[i];
-    }
+    stmt->body_start = body_start;
     stmt->body_count = body_count;
     return stmt;
 }
@@ -1286,7 +1473,31 @@ int parse_program(Parser *parser) {
         parser_skip_newlines(parser);
     }
 
-    return !parser->had_error;
+    if (parser->had_error) {
+        return 0;
+    }
+
+    /* Parsing is finished, so the block pool will not move again: aim each
+       statement's block pointers into it. */
+    {
+        int i;
+
+        for (i = 0; i < parser->statement_count; i++) {
+            Stmt *stmt = &parser->statements[i];
+
+            if (stmt->then_count > 0) {
+                stmt->then_statements = parser->block_items + stmt->then_start;
+            }
+            if (stmt->else_count > 0) {
+                stmt->else_statements = parser->block_items + stmt->else_start;
+            }
+            if (stmt->body_count > 0) {
+                stmt->body_statements = parser->block_items + stmt->body_start;
+            }
+        }
+    }
+
+    return 1;
 }
 
 int print_parse_tree(const char *path, const char *source) {
@@ -1295,6 +1506,7 @@ int print_parse_tree(const char *path, const char *source) {
 
     parser_init(&parser, path, source);
     if (!parse_program(&parser)) {
+        parser_free(&parser);
         return 0;
     }
 
@@ -1304,5 +1516,6 @@ int print_parse_tree(const char *path, const char *source) {
         print_statement_tree(&parser, &parser.statements[stmt_index], 2);
     }
     printf("EOF\n");
+    parser_free(&parser);
     return 1;
 }

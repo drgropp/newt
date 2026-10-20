@@ -992,7 +992,7 @@ static void pop_variables(Interpreter *interpreter, int variable_start) {
 
 static int execute_statement(Interpreter *interpreter, Stmt *stmt);
 
-static int execute_statement_list(Interpreter *interpreter, int statements[256], int count) {
+static int execute_statement_list(Interpreter *interpreter, int *statements, int count) {
     int i;
 
     for (i = 0;
@@ -1012,7 +1012,7 @@ static int execute_statement_list(Interpreter *interpreter, int statements[256],
 }
 
 static int execute_scoped_statement_list(Interpreter *interpreter,
-                                         int statements[256],
+                                         int *statements,
                                          int count) {
     int variable_start = interpreter->variable_count;
     int succeeded;
@@ -1512,6 +1512,7 @@ int run_program(const char *path,
 
     parser_init(&parser, path, source);
     if (!parse_program(&parser)) {
+        parser_free(&parser);
         return 0;
     }
 
@@ -1519,6 +1520,7 @@ int run_program(const char *path,
     interpreter.variables = malloc(NEWT_MAX_VARIABLES * sizeof(Variable));
     if (interpreter.variables == NULL) {
         fprintf(stderr, "error: not enough memory for variables\n");
+        parser_free(&parser);
         return 0;
     }
     interpreter.variable_count = 0;
@@ -1552,6 +1554,7 @@ int run_program(const char *path,
                              make_number_value(NEWT_E),
                              0)) {
             free(interpreter.variables);
+            parser_free(&parser);
             return 0;
         }
     }
@@ -1582,6 +1585,7 @@ int run_program(const char *path,
         }
         free(interpreter.release_stack);
         free(interpreter.variables);
+        parser_free(&parser);
         return succeeded;
     }
 }

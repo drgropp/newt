@@ -234,9 +234,6 @@ The preview interpreter uses fixed-size storage for most internal structures. Cu
 - 256 nested function calls;
 - 100,000 iterations per execution of one `while` statement;
 - 4,096 variables and 256 functions in the active interpreter state;
-- 256 parsed statements and 1,024 parsed expressions per source file;
-- 1,024 parsed call arguments in total;
-- 1,024 parsed list elements in total;
 - file paths shorter than 1,024 bytes for file built-ins.
 
 Programs that exceed a checked limit report an error. These limits are implementation constraints, not language goals.

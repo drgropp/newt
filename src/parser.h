@@ -35,17 +35,24 @@ typedef enum {
     STMT_FOR,
     STMT_PRINT
 } StmtKind;
+/* Block statement lists live in one shared pool (Parser.block_items). Each
+   block records where its run starts; once parsing succeeds, the *_statements
+   pointers are aimed into the finished pool, which never moves again. */
 typedef struct {
     StmtKind kind;
     Token name;
     Expr *expression;
     Expr *target;
-    int then_statements[256];
+    int index;
+    int *then_statements;
+    int then_start;
     int then_count;
-    int else_statements[256];
+    int *else_statements;
+    int else_start;
     int else_count;
     int has_else;
-    int body_statements[256];
+    int *body_statements;
+    int body_start;
     int body_count;
     int parameter_start;
     int parameter_count;
@@ -60,29 +67,54 @@ struct Expr {
     int element_start;
     int element_count;
 };
+/* Expressions point at each other by address, so they are allocated in
+   fixed-size blocks that never move (a growable array could move them). */
+typedef struct ExprBlock ExprBlock;
+
+/* Every array below grows as needed and is owned by the parser;
+   parser_free releases all of it, even after a parse error. */
 typedef struct {
     Lexer lexer;
     Token current;
     Token previous;
     const char *path;
     int had_error;
-    Expr expressions[1024];
+    ExprBlock *expr_blocks;
+    int expr_block_used;
     int expression_count;
-    Stmt statements[256];
+    Stmt *statements;
     int statement_count;
-    Token parameters[256];
+    int statement_capacity;
+    Token *parameters;
     int parameter_count;
-    Expr *call_arguments[1024];
+    int parameter_capacity;
+    Expr **call_arguments;
     int call_argument_count;
-    Expr *list_elements[1024];
+    int call_argument_capacity;
+    Expr **list_elements;
     int list_element_count;
-    int top_level_statements[256];
+    int list_element_capacity;
+    int *top_level_statements;
     int top_level_statement_count;
+    int top_level_statement_capacity;
+    int *block_items;
+    int block_item_count;
+    int block_item_capacity;
+    /* Temporary stacks for blocks and list literals that are still being
+       parsed; nested ones push above and pop back before the outer continues. */
+    int *block_scratch;
+    int block_scratch_count;
+    int block_scratch_capacity;
+    Expr **element_scratch;
+    int element_scratch_count;
+    int element_scratch_capacity;
 } Parser;
 
 void parser_init(Parser *parser, const char *path, const char *source);
 
 int parse_program(Parser *parser);
+
+void parser_free(Parser *parser);
 
 int print_parse_tree(const char *path, const char *source);
 
