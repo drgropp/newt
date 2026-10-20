@@ -55,7 +55,9 @@ mut score = 10
 score = score + 5
 ```
 
-Reassigning a `val`, mutating a list through a `val` access path, assigning an undefined variable, or defining the same variable twice in one scope is a runtime error. Function parameters behave as immutable local variables, including when their values are lists. Function-local variables are discarded when the call returns. Each executed `if`, `else if`, or `else` branch creates a child scope. Each `while` iteration also creates a child scope. Variables declared in those blocks are discarded on exit, including exit through `break`, `continue`, or `return`; assignments to an outer `mut` still update the outer binding. Each `for` iteration keeps its existing child scope for its immutable loop variable and declarations in that iteration. A block-local variable may shadow an outer variable without replacing it.
+Reassigning a `val`, mutating a list through a `val` access path, assigning an undefined variable, or defining the same variable twice in one scope is a runtime error. Function parameters behave as immutable local variables, including when their values are lists. Function-local variables are discarded when the call returns.
+
+Names are resolved lexically. Code inside a function sees its own parameters and local variables, plus top-level variables: those declared at the outermost level of the program, outside any block, before the call. A function may assign a top-level `mut` variable. A function never sees the variables of the function that called it, and variables declared inside a top-level `if`, `while` or `for` block are not visible to functions. Each executed `if`, `else if`, or `else` branch creates a child scope. Each `while` iteration also creates a child scope. Variables declared in those blocks are discarded on exit, including exit through `break`, `continue`, or `return`; assignments to an outer `mut` still update the outer binding. Each `for` iteration keeps its existing child scope for its immutable loop variable and declarations in that iteration. A block-local variable may shadow an outer variable without replacing it.
 
 ## Output
 

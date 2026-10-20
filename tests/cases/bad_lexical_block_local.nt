@@ -1,0 +1,8 @@
+fn peek()
+    print hidden
+end
+
+if true
+    val hidden = 1
+    peek()
+end

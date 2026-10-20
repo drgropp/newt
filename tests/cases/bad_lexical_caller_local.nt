@@ -1,0 +1,10 @@
+fn peek()
+    print secret
+end
+
+fn caller()
+    val secret = "caller's local"
+    peek()
+end
+
+caller()

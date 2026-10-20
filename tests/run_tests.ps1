@@ -478,6 +478,34 @@ $Tests = @(
         Stderr = "tests/cases/bad_continue_function.nt:2:5: runtime error: continue can only be used inside a loop`n"
     },
     @{
+        Name = "functions read and assign top-level variables"
+        Arguments = "tests/cases/lexical_globals.nt"
+        ExitCode = 0
+        Stdout = "count: 1`ncount: 2`n2`n3.14159`n"
+        Stderr = ""
+    },
+    @{
+        Name = "functions cannot see caller locals"
+        Arguments = "tests/cases/bad_lexical_caller_local.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_lexical_caller_local.nt:2:11: runtime error: undefined variable 'secret'`n"
+    },
+    @{
+        Name = "functions cannot see top-level block locals"
+        Arguments = "tests/cases/bad_lexical_block_local.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_lexical_block_local.nt:2:11: runtime error: undefined variable 'hidden'`n"
+    },
+    @{
+        Name = "parameters and locals shadow globals"
+        Arguments = "tests/cases/lexical_shadowing.nt"
+        ExitCode = 0
+        Stdout = "parameter`nouter local`nglobal`n"
+        Stderr = ""
+    },
+    @{
         Name = "missing input CLI failure"
         Arguments = ""
         ExitCode = 1

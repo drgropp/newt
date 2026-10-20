@@ -1,0 +1,16 @@
+mut counter = 0
+val label = "count"
+
+fn bump()
+    counter = counter + 1
+    print label + ": " + text(counter)
+end
+
+fn area(r)
+    return pi * r * r
+end
+
+bump()
+bump()
+print counter
+print area(1)

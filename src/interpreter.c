@@ -427,12 +427,25 @@ static void runtime_function_arity_error(Interpreter *interpreter,
     runtime_error(interpreter, name, message);
 }
 
+/* Lexical scoping. Top-level code sees every variable in scope. Inside a
+   function, lookup checks that call's own frame, then top-level (global)
+   variables; it never sees variables belonging to the caller. */
 Variable *find_variable(Interpreter *interpreter, Token name) {
+    int stop = interpreter->call_depth > 0 ? interpreter->frame_base : 0;
     int i;
 
-    for (i = interpreter->variable_count - 1; i >= 0; i--) {
+    for (i = interpreter->variable_count - 1; i >= stop; i--) {
         if (token_names_match(interpreter->variables[i].name, name)) {
             return &interpreter->variables[i];
+        }
+    }
+
+    if (interpreter->call_depth > 0) {
+        for (i = interpreter->global_limit - 1; i >= 0; i--) {
+            if (interpreter->variables[i].scope_depth == 0 &&
+                token_names_match(interpreter->variables[i].name, name)) {
+                return &interpreter->variables[i];
+            }
         }
     }
 
@@ -1036,6 +1049,8 @@ static int call_function(Interpreter *interpreter,
     int previous_breaking = interpreter->is_breaking;
     int previous_continuing = interpreter->is_continuing;
     int previous_loop_depth = interpreter->loop_depth;
+    int previous_frame_base;
+    int previous_global_limit;
     int variable_start = interpreter->variable_count;
     int succeeded = 1;
     int did_return;
@@ -1209,6 +1224,12 @@ static int call_function(Interpreter *interpreter,
         }
     }
 
+    previous_frame_base = interpreter->frame_base;
+    previous_global_limit = interpreter->global_limit;
+    if (interpreter->call_depth == 0) {
+        interpreter->global_limit = interpreter->variable_count;
+    }
+    interpreter->frame_base = interpreter->variable_count;
     interpreter->call_depth++;
     interpreter->scope_depth++;
     interpreter->is_returning = 0;
@@ -1244,6 +1265,8 @@ static int call_function(Interpreter *interpreter,
     interpreter->is_continuing = previous_continuing;
     interpreter->loop_depth = previous_loop_depth;
     interpreter->return_value = previous_return_value;
+    interpreter->frame_base = previous_frame_base;
+    interpreter->global_limit = previous_global_limit;
 
     if (!succeeded) {
         return 0;
@@ -1524,6 +1547,8 @@ int run_program(const char *path,
         return 0;
     }
     interpreter.variable_count = 0;
+    interpreter.frame_base = 0;
+    interpreter.global_limit = 0;
     interpreter.function_count = 0;
     interpreter.call_depth = 0;
     interpreter.scope_depth = 0;

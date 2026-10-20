@@ -57,6 +57,11 @@ typedef struct {
        pointers stay valid while an expression is being evaluated. */
     Variable *variables;
     int variable_count;
+    /* Lexical scoping: the first variable slot of the running function's
+       frame, and how many slots existed when the outermost call began
+       (top-level variables live below that). */
+    int frame_base;
+    int global_limit;
     Function functions[256];
     int function_count;
     int call_depth;

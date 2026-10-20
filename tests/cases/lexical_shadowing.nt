@@ -1,0 +1,14 @@
+val name = "global"
+
+fn show(name)
+    print name
+end
+
+fn outer()
+    val name = "outer local"
+    show("parameter")
+    print name
+end
+
+outer()
+print name
