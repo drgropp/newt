@@ -518,6 +518,13 @@ $Tests = @(
         ExitCode = 1
         Stdout = ""
         Stderr = "error: could not open tests/cases/does_not_exist.nt`n"
+    },
+    @{
+        Name = "symbol logic operators"
+        Arguments = "tests/cases/logic_symbols.nt"
+        ExitCode = 0
+        Stdout = "false`ntrue`nfalse`ntrue`n"
+        Stderr = ""
     }
 )
 

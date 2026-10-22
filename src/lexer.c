@@ -151,13 +151,13 @@ static TokenType keyword_type(Token token) {
     if (token_text_equals(token, "false")) {
         return TOKEN_FALSE;
     }
-    if (token_text_equals(token, "and")) {
+    if (token_text_equals(token, "&&")) {
         return TOKEN_AND;
     }
-    if (token_text_equals(token, "or")) {
+    if (token_text_equals(token, "||")) {
         return TOKEN_OR;
     }
-    if (token_text_equals(token, "not")) {
+    if (token_text_equals(token, "!")) {
         return TOKEN_NOT;
     }
 
@@ -319,6 +319,16 @@ Token next_token(Lexer *lexer) {
             if (lexer_match(lexer, '=')) {
                 return make_token(lexer, TOKEN_BANG_EQUAL);
             }
+            return make_token(lexer, TOKEN_NOT);
+        case '&':
+            if (lexer_match(lexer, '&')) {
+                return make_token(lexer, TOKEN_AND);
+            }
+            break;
+        case '|':
+            if (lexer_match(lexer, '|')) {
+                return make_token(lexer, TOKEN_OR);
+            }
             break;
         case '<':
             return make_token(lexer, lexer_match(lexer, '=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
@@ -390,11 +400,11 @@ static const char *token_type_name(TokenType type) {
         case TOKEN_FALSE:
             return "FALSE";
         case TOKEN_AND:
-            return "AND";
+            return "&&";
         case TOKEN_OR:
-            return "OR";
+            return "||";
         case TOKEN_NOT:
-            return "NOT";
+            return "!";
         case TOKEN_PLUS:
             return "PLUS";
         case TOKEN_MINUS:

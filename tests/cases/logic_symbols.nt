@@ -1,0 +1,4 @@
+   print true && false
+   print true || false
+   print !true
+   print !(1 == 2) && 3 > 2
