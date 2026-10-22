@@ -11,7 +11,7 @@
 #include <limits.h>
 #include <errno.h>
 
-#define NEWT_VERSION "0.1.0"
+#define NEWT_VERSION "0.001"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
 #define NEWT_MAX_CALL_DEPTH 256
 #define NEWT_MAX_VARIABLES 4096
