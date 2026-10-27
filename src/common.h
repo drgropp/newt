@@ -10,6 +10,7 @@
 #include <math.h>
 #include <limits.h>
 #include <errno.h>
+#include <float.h>
 
 #define NEWT_VERSION "0.001"
 #define NEWT_MAX_WHILE_ITERATIONS 100000
@@ -20,3 +21,4 @@
 #define NEWT_E 2.71828182845904523536028747135266250
 
 #endif
+

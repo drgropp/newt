@@ -16,6 +16,356 @@ function Normalize-Newlines([string]$Text) {
 
 $Tests = @(
     @{
+        Name = "large typed doubles print safely"
+        Arguments = "tests/cases/types_large_double.nt"
+        ExitCode = 0
+        Stdout = "1e+100`n[1e+100]`n"
+        Stderr = ""
+    },
+    @{
+        Name = "typed example"
+        Arguments = "examples/typed_systems.nt"
+        ExitCode = 0
+        Stdout = "24`n21.5`n1e-06`n12`n"
+        Stderr = ""
+    },
+    @{
+        Name = "typed parse output"
+        Arguments = "--parse examples/typed_systems.nt"
+        ExitCode = 0
+        Stdout = "PROGRAM`n  FN_DECL name=consume`n    RETURNS int`n    PARAMETERS`n      PARAM name=fuel type=int mutable=1`n      PARAM name=amount type=int mutable=0`n    BODY`n      ASSIGN name=fuel`n        BINARY -`n          IDENT fuel`n          IDENT amount`n      RETURN`n        IDENT fuel`n  FN_DECL name=main`n    RETURNS void`n    BODY`n      LET_DECL name=capacity`n        TYPE int`n        NUMBER 25`n      MUT_DECL name=fuel`n        TYPE int`n        IDENT capacity`n      LET_DECL name=temperature`n        TYPE float`n        NUMBER 21.5`n      MUT_DECL name=precise`n        TYPE double`n        NUMBER 0.000001`n      ASSIGN name=fuel`n        CALL name=consume arguments=2`n          IDENT fuel`n          NUMBER 1`n      PRINT`n        IDENT fuel`n      PRINT`n        IDENT temperature`n      PRINT`n        IDENT precise`n      PRINT`n        BINARY /`n          CALL name=double arguments=1`n            IDENT fuel`n          NUMBER 2.0`n      RETURN`n  CALL name=main arguments=0`nEOF`n"
+        Stderr = ""
+    },
+    @{
+        Name = "typed token output"
+        Arguments = "--tokens examples/typed_systems.nt"
+        ExitCode = 0
+        Stdout = "1:1 SEMICOLON ;`n1:72 NEWLINE`n2:1 INT int`n2:5 IDENT consume`n2:12 LEFT_PAREN (`n2:13 INT int`n2:17 IDENT fuel`n2:21 COMMA ,`n2:23 CONST const`n2:29 INT int`n2:33 IDENT amount`n2:39 RIGHT_PAREN )`n2:41 LEFT_BRACE {`n2:42 NEWLINE`n3:5 IDENT fuel`n3:10 EQUAL =`n3:12 IDENT fuel`n3:17 MINUS -`n3:19 IDENT amount`n3:25 SEMICOLON ;`n3:26 NEWLINE`n4:5 RETURN return`n4:12 IDENT fuel`n4:16 SEMICOLON ;`n4:17 NEWLINE`n5:1 RIGHT_BRACE }`n5:2 NEWLINE`n6:1 NEWLINE`n7:1 VOID void`n7:6 IDENT main`n7:10 LEFT_PAREN (`n7:11 VOID void`n7:15 RIGHT_PAREN )`n7:17 LEFT_BRACE {`n7:18 NEWLINE`n8:5 CONST const`n8:11 INT int`n8:15 IDENT capacity`n8:24 EQUAL =`n8:26 NUMBER 25`n8:28 SEMICOLON ;`n8:29 NEWLINE`n9:5 MUT mut`n9:9 INT int`n9:13 IDENT fuel`n9:18 EQUAL =`n9:20 IDENT capacity`n9:28 SEMICOLON ;`n9:29 NEWLINE`n10:5 LET let`n10:9 FLOAT float`n10:15 IDENT temperature`n10:27 EQUAL =`n10:29 NUMBER 21.5`n10:33 SEMICOLON ;`n10:34 NEWLINE`n11:5 DOUBLE double`n11:12 IDENT precise`n11:20 EQUAL =`n11:22 NUMBER 0.000001`n11:30 SEMICOLON ;`n11:31 NEWLINE`n12:1 NEWLINE`n13:5 IDENT fuel`n13:10 EQUAL =`n13:12 IDENT consume`n13:19 LEFT_PAREN (`n13:20 IDENT fuel`n13:24 COMMA ,`n13:26 NUMBER 1`n13:27 RIGHT_PAREN )`n13:28 SEMICOLON ;`n13:29 NEWLINE`n14:5 PRINT print`n14:11 IDENT fuel`n14:15 SEMICOLON ;`n14:16 NEWLINE`n15:5 PRINT print`n15:11 IDENT temperature`n15:22 SEMICOLON ;`n15:23 NEWLINE`n16:5 PRINT print`n16:11 IDENT precise`n16:18 SEMICOLON ;`n16:19 NEWLINE`n17:5 PRINT print`n17:11 DOUBLE double`n17:17 LEFT_PAREN (`n17:18 IDENT fuel`n17:22 RIGHT_PAREN )`n17:24 SLASH /`n17:26 NUMBER 2.0`n17:29 SEMICOLON ;`n17:30 NEWLINE`n18:5 RETURN return`n18:11 SEMICOLON ;`n18:12 NEWLINE`n19:1 RIGHT_BRACE }`n19:2 NEWLINE`n20:1 NEWLINE`n21:1 SEMICOLON ;`n21:49 NEWLINE`n22:1 IDENT main`n22:5 LEFT_PAREN (`n22:6 RIGHT_PAREN )`n22:7 SEMICOLON ;`n22:8 NEWLINE`n23:1 EOF`n"
+        Stderr = ""
+    },
+    @{
+        Name = "bad_types_float_overflow"
+        Arguments = "tests/cases/bad_types_float_overflow.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_float_overflow.nt:1:39: runtime error: numeric value must be finite`n"
+    },
+    @{
+        Name = "bad_types_double_overflow"
+        Arguments = "tests/cases/bad_types_double_overflow.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_double_overflow.nt:1:42: runtime error: numeric value must be finite`n"
+    },
+    @{
+        Name = "bad_types_non_numeric_return"
+        Arguments = "tests/cases/bad_types_non_numeric_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_non_numeric_return.nt:1:27: runtime error: expected bool, got untyped (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "bad_types_typed_legacy"
+        Arguments = "tests/cases/bad_types_typed_legacy.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_typed_legacy.nt:1:20: runtime error: expected int, got untyped (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "bad_types_unreached_return"
+        Arguments = "tests/cases/bad_types_unreached_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_unreached_return.nt:1:45: runtime error: typed function completed without returning a value`n"
+    },
+    @{
+        Name = "typed parameter pool growth"
+        Arguments = "tests/cases/types_parameter_growth.nt"
+        ExitCode = 0
+        Stdout = "5`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_declarations"
+        Arguments = "tests/cases/types_declarations.nt"
+        ExitCode = 0
+        Stdout = "24`n100`n2`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_functions"
+        Arguments = "tests/cases/types_functions.nt"
+        ExitCode = 0
+        Stdout = "hello`n5`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_float_double"
+        Arguments = "tests/cases/types_float_double.nt"
+        ExitCode = 0
+        Stdout = "2.5`n2.5`n10`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_integer_division"
+        Arguments = "tests/cases/types_integer_division.nt"
+        ExitCode = 0
+        Stdout = "2`n-2`n4`ntrue`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_rounding"
+        Arguments = "tests/cases/types_rounding.nt"
+        ExitCode = 0
+        Stdout = "true`ntrue`ntrue`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_limits"
+        Arguments = "tests/cases/types_limits.nt"
+        ExitCode = 0
+        Stdout = "-2147483648`n2147483647`n-2`n5`n5`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_non_numeric"
+        Arguments = "tests/cases/types_non_numeric.nt"
+        ExitCode = 0
+        Stdout = "newt`ntrue`n3`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_recursion"
+        Arguments = "tests/cases/types_recursion.nt"
+        ExitCode = 0
+        Stdout = "21`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_const_parameter"
+        Arguments = "tests/cases/types_const_parameter.nt"
+        ExitCode = 0
+        Stdout = "9`n9`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_void_fallthrough"
+        Arguments = "tests/cases/types_void_fallthrough.nt"
+        ExitCode = 0
+        Stdout = "done`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_legacy_bridge"
+        Arguments = "tests/cases/types_legacy_bridge.nt"
+        ExitCode = 0
+        Stdout = "5`n3`n"
+        Stderr = ""
+    },
+    @{
+        Name = "types_parameter_copy"
+        Arguments = "tests/cases/types_parameter_copy.nt"
+        ExitCode = 0
+        Stdout = "9`n2`n"
+        Stderr = ""
+    },
+    @{
+        Name = "bad_types_assignment"
+        Arguments = "tests/cases/bad_types_assignment.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_assignment.nt:1:16: runtime error: expected int, got string (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "bad_types_const"
+        Arguments = "tests/cases/bad_types_const.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_const.nt:1:18: runtime error: cannot assign to immutable variable 'n'`n"
+    },
+    @{
+        Name = "bad_types_let"
+        Arguments = "tests/cases/bad_types_let.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_let.nt:1:16: runtime error: cannot assign to immutable variable 'n'`n"
+    },
+    @{
+        Name = "bad_types_parameter"
+        Arguments = "tests/cases/bad_types_parameter.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_parameter.nt:1:42: runtime error: expected int, got string (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "bad_types_const_parameter"
+        Arguments = "tests/cases/bad_types_const_parameter.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_const_parameter.nt:1:28: runtime error: cannot assign to immutable variable 'n'`n"
+    },
+    @{
+        Name = "bad_types_return"
+        Arguments = "tests/cases/bad_types_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_return.nt:1:26: runtime error: expected int, got string (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "bad_types_missing_return"
+        Arguments = "tests/cases/bad_types_missing_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_missing_return.nt:1:20: runtime error: typed function completed without returning a value`n"
+    },
+    @{
+        Name = "bad_types_void_return"
+        Arguments = "tests/cases/bad_types_void_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_void_return.nt:1:20: runtime error: void function cannot return a value`n"
+    },
+    @{
+        Name = "bad_types_void_value"
+        Arguments = "tests/cases/bad_types_void_value.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_void_value.nt:1:27: runtime error: void function cannot be used as a value`n"
+    },
+    @{
+        Name = "bad_types_bare_return"
+        Arguments = "tests/cases/bad_types_bare_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_bare_return.nt:1:19: runtime error: return requires a value in this function`n"
+    },
+    @{
+        Name = "bad_types_mixed"
+        Arguments = "tests/cases/bad_types_mixed.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_mixed.nt:1:34: runtime error: mixed numeric types require an explicit conversion`n"
+    },
+    @{
+        Name = "bad_types_conversion"
+        Arguments = "tests/cases/bad_types_conversion.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_conversion.nt:1:23: runtime error: expected int, got double (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "bad_types_fraction"
+        Arguments = "tests/cases/bad_types_fraction.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_fraction.nt:1:9: runtime error: value is not representable as int`n"
+    },
+    @{
+        Name = "bad_types_overflow"
+        Arguments = "tests/cases/bad_types_overflow.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_overflow.nt:1:27: runtime error: int arithmetic overflow`n"
+    },
+    @{
+        Name = "bad_types_multiply"
+        Arguments = "tests/cases/bad_types_multiply.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_multiply.nt:1:29: runtime error: int arithmetic overflow`n"
+    },
+    @{
+        Name = "bad_types_divide_overflow"
+        Arguments = "tests/cases/bad_types_divide_overflow.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_divide_overflow.nt:1:30: runtime error: int arithmetic overflow`n"
+    },
+    @{
+        Name = "bad_types_negate"
+        Arguments = "tests/cases/bad_types_negate.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_negate.nt:1:28: runtime error: int arithmetic overflow`n"
+    },
+    @{
+        Name = "bad_types_divide_zero"
+        Arguments = "tests/cases/bad_types_divide_zero.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_divide_zero.nt:1:20: runtime error: division by zero`n"
+    },
+    @{
+        Name = "bad_types_cast_range"
+        Arguments = "tests/cases/bad_types_cast_range.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_cast_range.nt:1:9: runtime error: value is not representable as int`n"
+    },
+    @{
+        Name = "bad_types_cast_string"
+        Arguments = "tests/cases/bad_types_cast_string.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_cast_string.nt:1:9: runtime error: numeric conversion requires a number`n"
+    },
+    @{
+        Name = "bad_types_cast_arity"
+        Arguments = "tests/cases/bad_types_cast_arity.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_cast_arity.nt:1:9: runtime error: numeric conversion expects exactly one argument`n"
+    },
+    @{
+        Name = "bad_types_float_range"
+        Arguments = "tests/cases/bad_types_float_range.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_float_range.nt:1:11: runtime error: value is not representable as float`n"
+    },
+    @{
+        Name = "bad_types_void_variable"
+        Arguments = "tests/cases/bad_types_void_variable.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_void_variable.nt:1:6: parse error: variables cannot have type void`n"
+    },
+    @{
+        Name = "bad_types_void_parameter"
+        Arguments = "tests/cases/bad_types_void_parameter.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_void_parameter.nt:1:16: parse error: void must be the only parameter marker`n"
+    },
+    @{
+        Name = "bad_types_parameter_type"
+        Arguments = "tests/cases/bad_types_parameter_type.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_parameter_type.nt:1:11: parse error: expected non-void parameter type`n"
+    },
+    @{
+        Name = "bad_types_conflict"
+        Arguments = "tests/cases/bad_types_conflict.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_conflict.nt:1:5: parse error: expected identifier after let`n"
+    },
+    @{
+        Name = "bad_types_const_no_type"
+        Arguments = "tests/cases/bad_types_const_no_type.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_const_no_type.nt:1:7: parse error: expected type after const`n"
+    },
+    @{
+        Name = "bad_types_uninitialized"
+        Arguments = "tests/cases/bad_types_uninitialized.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_types_uninitialized.nt:1:6: parse error: expected '=' after variable name`n"
+    },
+    @{
         Name = "brace tokens"
         Arguments = "--tokens tests/cases/brace_tokens.nt"
         ExitCode = 0

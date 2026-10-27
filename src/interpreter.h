@@ -9,7 +9,8 @@ typedef enum {
     VALUE_NUMBER,
     VALUE_STRING,
     VALUE_BOOL,
-    VALUE_LIST
+    VALUE_LIST,
+    VALUE_VOID
 } ValueType;
 typedef struct Value Value;
 
@@ -34,7 +35,12 @@ typedef struct ListValue {
 } ListValue;
 struct Value {
     ValueType type;
+    /* Numeric payloads retain their actual host C representation.
+       number is also the double view used by existing math built-ins. */
     double number;
+    DeclType numeric_type;
+    int integer;
+    float single;
     int boolean;
     Token string;
     /* NULL when the string points into the source text. */
@@ -46,6 +52,7 @@ typedef struct {
     Value value;
     int is_mutable;
     int scope_depth;
+    DeclType declared_type;
 } Variable;
 typedef struct {
     Token name;
@@ -71,6 +78,8 @@ typedef struct {
     int is_continuing;
     int loop_depth;
     Value return_value;
+    DeclType return_type;
+    DeclType literal_type;
     /* Script arguments borrow the argv strings owned by the C runtime. */
     int script_argument_count;
     char **script_arguments;
@@ -136,3 +145,4 @@ int run_program(const char *path,
                        char **script_arguments);
 
 #endif
+

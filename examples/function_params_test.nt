@@ -4,10 +4,10 @@ fn add(a, b) {
     return a + b;
 }
 
-fn double(x) {
+fn twice(x) {
     return x * 2;
 }
 
 print add(2, 3);
-print double(10);
+print twice(10);
 

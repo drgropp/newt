@@ -1,0 +1,1 @@
+float n = float(pow(10, 38)); print n * 4;

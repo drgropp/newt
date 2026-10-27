@@ -8,6 +8,9 @@ Value make_number_value(double number) {
 
     value.type = VALUE_NUMBER;
     value.number = number;
+    value.numeric_type = TYPE_AUTO;
+    value.integer = 0;
+    value.single = 0;
     value.boolean = 0;
     value.string.start = NULL;
     value.string.length = 0;
@@ -24,6 +27,9 @@ static Value make_string_value(Token string) {
 
     value.type = VALUE_STRING;
     value.number = 0;
+    value.numeric_type = TYPE_AUTO;
+    value.integer = 0;
+    value.single = 0;
     value.boolean = 0;
     value.string = string;
     value.string_object = NULL;
@@ -36,6 +42,9 @@ Value make_bool_value(int boolean) {
 
     value.type = VALUE_BOOL;
     value.number = 0;
+    value.numeric_type = TYPE_AUTO;
+    value.integer = 0;
+    value.single = 0;
     value.boolean = boolean;
     value.string.start = NULL;
     value.string.length = 0;
@@ -52,6 +61,9 @@ static Value make_list_value(ListValue *list) {
 
     value.type = VALUE_LIST;
     value.number = 0;
+    value.numeric_type = TYPE_AUTO;
+    value.integer = 0;
+    value.single = 0;
     value.boolean = 0;
     value.string.start = NULL;
     value.string.length = 0;
@@ -109,6 +121,8 @@ static const char *value_type_name(ValueType type) {
             return "boolean";
         case VALUE_LIST:
             return "list";
+        case VALUE_VOID:
+            return "void";
     }
 
     return "unknown value";
@@ -568,11 +582,173 @@ static int resolve_list_index(Interpreter *interpreter,
     return 1;
 }
 
+/* The initial interpreter target uses the common 32/32/64 C numeric model. */
+_Static_assert(INT_MAX == 2147483647 && INT_MIN == (-2147483647 - 1), "Newt requires 32-bit int");
+_Static_assert(FLT_RADIX == 2 && FLT_MANT_DIG == 24 && sizeof(float) == 4, "Newt requires binary32 float");
+_Static_assert(DBL_MANT_DIG == 53 && sizeof(double) == 8, "Newt requires binary64 double");
+
+static const char *decl_type_name(DeclType type) {
+    switch (type) {
+        case TYPE_INT: return "int";
+        case TYPE_FLOAT: return "float";
+        case TYPE_DOUBLE: return "double";
+        case TYPE_VOID: return "void";
+        case TYPE_BOOL: return "bool";
+        case TYPE_STRING: return "string";
+        case TYPE_LIST: return "list";
+        default: return "untyped";
+    }
+}
+
+static int convert_numeric(Interpreter *interpreter, Token token, Value source,
+                           DeclType type, int explicit_cast, Value *out) {
+    double n;
+    if (source.type != VALUE_NUMBER) {
+        runtime_error(interpreter, token, "numeric conversion requires a number");
+        return 0;
+    }
+    n = source.number;
+    if (!isfinite(n)) {
+        runtime_error(interpreter, token, "numeric value must be finite");
+        return 0;
+    }
+    *out = make_number_value(n);
+    out->numeric_type = type;
+    if (type == TYPE_INT) {
+        double whole = trunc(n);
+        if ((!explicit_cast && whole != n) || whole < INT_MIN || whole > INT_MAX) {
+            runtime_error(interpreter, token, "value is not representable as int");
+            return 0;
+        }
+        out->integer = (int)whole;
+        out->number = (double)out->integer;
+    } else if (type == TYPE_FLOAT) {
+        if (fabs(n) > FLT_MAX) {
+            runtime_error(interpreter, token, "value is not representable as float");
+            return 0;
+        }
+        out->single = (float)n;
+        out->number = (double)out->single;
+    }
+    return 1;
+}
+
+static int require_decl_type(Interpreter *interpreter, Token token, DeclType type, Value value) {
+    int matches = type == TYPE_AUTO ||
+        (type == TYPE_INT && value.type == VALUE_NUMBER && value.numeric_type == TYPE_INT) ||
+        (type == TYPE_FLOAT && value.type == VALUE_NUMBER && value.numeric_type == TYPE_FLOAT) ||
+        (type == TYPE_DOUBLE && value.type == VALUE_NUMBER && value.numeric_type == TYPE_DOUBLE) ||
+        (type == TYPE_BOOL && value.type == VALUE_BOOL) ||
+        (type == TYPE_STRING && value.type == VALUE_STRING) ||
+        (type == TYPE_LIST && value.type == VALUE_LIST) ||
+        (type == TYPE_VOID && value.type == VALUE_VOID);
+    if (!matches) {
+        char message[160];
+        const char *actual = value.type == VALUE_NUMBER ? decl_type_name(value.numeric_type) : value_type_name(value.type);
+        snprintf(message, sizeof(message), "expected %s, got %s (use an explicit numeric conversion when needed)", decl_type_name(type), actual);
+        runtime_error(interpreter, token, message);
+    }
+    return matches;
+}
+
+static int eval_decl_expression(Interpreter *interpreter, Expr *expr, DeclType type, Value *value) {
+    DeclType previous = interpreter->literal_type;
+    int ok;
+    interpreter->literal_type = type;
+    ok = eval_expression(interpreter, expr, value);
+    interpreter->literal_type = previous;
+    if (!ok) return 0;
+    if (!require_decl_type(interpreter, expr->token, type, *value)) {
+        value_release(interpreter, *value);
+        return 0;
+    }
+    return 1;
+}
+
+static int typed_numeric_operator(Interpreter *interpreter, Expr *expr, Value left, Value right, Value *out) {
+    DeclType type = left.numeric_type;
+    double result;
+    if (type != right.numeric_type) {
+        runtime_error(interpreter, expr->token, "mixed numeric types require an explicit conversion");
+        return 0;
+    }
+    switch (expr->token.type) {
+        case TOKEN_EQUAL_EQUAL: *out = make_bool_value(left.number == right.number); return 1;
+        case TOKEN_BANG_EQUAL: *out = make_bool_value(left.number != right.number); return 1;
+        case TOKEN_LESS: *out = make_bool_value(left.number < right.number); return 1;
+        case TOKEN_LESS_EQUAL: *out = make_bool_value(left.number <= right.number); return 1;
+        case TOKEN_GREATER: *out = make_bool_value(left.number > right.number); return 1;
+        case TOKEN_GREATER_EQUAL: *out = make_bool_value(left.number >= right.number); return 1;
+        default: break;
+    }
+    if (expr->token.type == TOKEN_SLASH && right.number == 0) {
+        runtime_error(interpreter, expr->token, "division by zero");
+        return 0;
+    }
+    if (type == TYPE_INT) {
+        long long a = left.integer, b = right.integer, n;
+        switch (expr->token.type) {
+            case TOKEN_PLUS: n = a + b; break;
+            case TOKEN_MINUS: n = a - b; break;
+            case TOKEN_STAR: n = a * b; break;
+            case TOKEN_SLASH: n = a / b; break;
+            default: runtime_error(interpreter, expr->token, "unsupported numeric operator"); return 0;
+        }
+        if (n < INT_MIN || n > INT_MAX) {
+            runtime_error(interpreter, expr->token, "int arithmetic overflow");
+            return 0;
+        }
+        return convert_numeric(interpreter, expr->token, make_number_value((double)n), type, 0, out);
+    }
+    if (type == TYPE_FLOAT) {
+        float a = left.single, b = right.single, n;
+        switch (expr->token.type) {
+            case TOKEN_PLUS: n = a + b; break;
+            case TOKEN_MINUS: n = a - b; break;
+            case TOKEN_STAR: n = a * b; break;
+            case TOKEN_SLASH: n = a / b; break;
+            default: runtime_error(interpreter, expr->token, "unsupported numeric operator"); return 0;
+        }
+        result = n;
+    } else {
+        switch (expr->token.type) {
+            case TOKEN_PLUS: result = left.number + right.number; break;
+            case TOKEN_MINUS: result = left.number - right.number; break;
+            case TOKEN_STAR: result = left.number * right.number; break;
+            case TOKEN_SLASH: result = left.number / right.number; break;
+            default: runtime_error(interpreter, expr->token, "unsupported numeric operator"); return 0;
+        }
+    }
+    return convert_numeric(interpreter, expr->token, make_number_value(result), type, 0, out);
+}
+
+static int is_numeric_literal_expression(const Expr *expr) {
+    if (expr == NULL) return 0;
+    if (expr->kind == EXPR_NUMBER) return 1;
+    if (expr->kind == EXPR_UNARY && expr->token.type == TOKEN_MINUS) return is_numeric_literal_expression(expr->left);
+    if (expr->kind == EXPR_BINARY && (expr->token.type == TOKEN_PLUS || expr->token.type == TOKEN_MINUS ||
+        expr->token.type == TOKEN_STAR || expr->token.type == TOKEN_SLASH)) {
+        return is_numeric_literal_expression(expr->left) && is_numeric_literal_expression(expr->right);
+    }
+    return 0;
+}
+
 static int eval_binary_operator(Interpreter *interpreter,
                                 Expr *expr,
                                 Value left,
                                 Value right,
                                 Value *value) {
+    if (left.type == VALUE_NUMBER && right.type == VALUE_NUMBER &&
+        (left.numeric_type != TYPE_AUTO || right.numeric_type != TYPE_AUTO)) {
+        /* A literal beside a typed operand adopts that operand's type. */
+        if (left.numeric_type == TYPE_AUTO && is_numeric_literal_expression(expr->left)) {
+            if (!eval_decl_expression(interpreter, expr->left, right.numeric_type, &left)) return 0;
+        }
+        if (right.numeric_type == TYPE_AUTO && is_numeric_literal_expression(expr->right)) {
+            if (!eval_decl_expression(interpreter, expr->right, left.numeric_type, &right)) return 0;
+        }
+        return typed_numeric_operator(interpreter, expr, left, right, value);
+    }
     switch (expr->token.type) {
         case TOKEN_EQUAL_EQUAL:
             if (left.type != right.type) {
@@ -686,6 +862,9 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                 return 0;
             }
             *value = make_number_value(number);
+            if (interpreter->literal_type == TYPE_INT || interpreter->literal_type == TYPE_FLOAT || interpreter->literal_type == TYPE_DOUBLE) {
+                return convert_numeric(interpreter, expr->token, *value, interpreter->literal_type, 0, value);
+            }
             return 1;
         case EXPR_INPUT_NUMBER:
             if (!read_input_number(interpreter, expr->token, &number)) {
@@ -783,6 +962,12 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             return 1;
         }
         case EXPR_UNARY:
+            if (expr->token.type == TOKEN_MINUS && interpreter->literal_type == TYPE_INT &&
+                expr->left->kind == EXPR_NUMBER) {
+                double magnitude;
+                if (!read_number_token(interpreter, expr->left->token, &magnitude)) return 0;
+                return convert_numeric(interpreter, expr->token, make_number_value(-magnitude), TYPE_INT, 0, value);
+            }
             if (!eval_expression(interpreter, expr->left, &left)) {
                 return 0;
             }
@@ -805,6 +990,13 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                                    "a number",
                                    left);
                 return 0;
+            }
+            if (left.numeric_type == TYPE_INT && left.integer == INT_MIN) {
+                runtime_error(interpreter, expr->token, "int arithmetic overflow");
+                return 0;
+            }
+            if (left.numeric_type != TYPE_AUTO) {
+                return convert_numeric(interpreter, expr->token, make_number_value(-left.number), left.numeric_type, 0, value);
             }
             *value = make_number_value(-left.number);
             return 1;
@@ -911,17 +1103,17 @@ static int define_variable(Interpreter *interpreter, Token name, Value value, in
     interpreter->variables[interpreter->variable_count].value = value;
     interpreter->variables[interpreter->variable_count].is_mutable = is_mutable;
     interpreter->variables[interpreter->variable_count].scope_depth = interpreter->scope_depth;
+    interpreter->variables[interpreter->variable_count].declared_type = TYPE_AUTO;
     interpreter->variable_count++;
     return 1;
 }
 
-static void print_number(double number) {
-    long long whole = (long long)number;
-
-    if (number == (double)whole) {
-        printf("%lld\n", whole);
+static void print_number_inline(double number) {
+    if (isfinite(number) && number >= (double)LLONG_MIN && number < 9223372036854775808.0 && trunc(number) == number) {
+        long long whole = (long long)number;
+        printf("%lld", whole);
     } else {
-        printf("%g\n", number);
+        printf("%g", number);
     }
 }
 
@@ -956,13 +1148,7 @@ static void print_value(Value value) {
             } else if (element.type == VALUE_LIST) {
                 printf("<list>");
             } else {
-                long long whole = (long long)element.number;
-
-                if (element.number == (double)whole) {
-                    printf("%lld", whole);
-                } else {
-                    printf("%g", element.number);
-                }
+                print_number_inline(element.number);
             }
         }
         printf("]\n");
@@ -979,7 +1165,8 @@ static void print_value(Value value) {
         return;
     }
 
-    print_number(value.number);
+    print_number_inline(value.number);
+    putchar('\n');
 }
 
 static int print_runtime_expression(Interpreter *interpreter, Expr *expr) {
@@ -1045,6 +1232,7 @@ static int call_function(Interpreter *interpreter,
     Value argument_values[NEWT_MAX_FUNCTION_PARAMETERS];
     Value returned_value = make_number_value(0);
     Value previous_return_value = interpreter->return_value;
+    DeclType previous_return_type = interpreter->return_type;
     int previous_returning = interpreter->is_returning;
     int previous_breaking = interpreter->is_breaking;
     int previous_continuing = interpreter->is_continuing;
@@ -1055,6 +1243,25 @@ static int call_function(Interpreter *interpreter,
     int succeeded = 1;
     int did_return;
     int i;
+
+    if (call->token.type == TOKEN_INT || call->token.type == TOKEN_FLOAT || call->token.type == TOKEN_DOUBLE) {
+        Value source, converted;
+        DeclType previous = interpreter->literal_type;
+        DeclType target = call->token.type == TOKEN_INT ? TYPE_INT : call->token.type == TOKEN_FLOAT ? TYPE_FLOAT : TYPE_DOUBLE;
+        int ok;
+        if (call->argument_count != 1) {
+            runtime_error(interpreter, call->token, "numeric conversion expects exactly one argument");
+            return 0;
+        }
+        interpreter->literal_type = TYPE_AUTO;
+        ok = eval_expression(interpreter, interpreter->parser->call_arguments[call->argument_start], &source);
+        interpreter->literal_type = previous;
+        if (!ok) return 0;
+        ok = convert_numeric(interpreter, call->token, source, target, 1, &converted);
+        value_release(interpreter, source);
+        if (ok && value != NULL) *value = converted;
+        return ok;
+    }
 
     if (token_text_equals(call->token, "arg_count")) {
         return call_arg_count(interpreter, call, value);
@@ -1219,7 +1426,7 @@ static int call_function(Interpreter *interpreter,
 
     for (i = 0; i < call->argument_count; i++) {
         Expr *argument = interpreter->parser->call_arguments[call->argument_start + i];
-        if (!eval_expression(interpreter, argument, &argument_values[i])) {
+        if (!eval_decl_expression(interpreter, argument, interpreter->parser->parameters[function->declaration->parameter_start + i].type, &argument_values[i])) {
             return 0;
         }
     }
@@ -1233,17 +1440,18 @@ static int call_function(Interpreter *interpreter,
     interpreter->call_depth++;
     interpreter->scope_depth++;
     interpreter->is_returning = 0;
+    interpreter->return_type = function->declaration->declared_type;
     interpreter->is_breaking = 0;
     interpreter->is_continuing = 0;
     interpreter->loop_depth = 0;
 
     for (i = 0; i < function->declaration->parameter_count; i++) {
-        Token parameter = interpreter->parser->parameters[
-            function->declaration->parameter_start + i];
-        if (!define_variable(interpreter, parameter, argument_values[i], 0)) {
+        Parameter parameter = interpreter->parser->parameters[function->declaration->parameter_start + i];
+        if (!define_variable(interpreter, parameter.name, argument_values[i], parameter.is_mutable)) {
             succeeded = 0;
             break;
         }
+        interpreter->variables[interpreter->variable_count - 1].declared_type = parameter.type;
     }
 
     if (succeeded) {
@@ -1255,6 +1463,11 @@ static int call_function(Interpreter *interpreter,
     did_return = interpreter->is_returning;
     if (did_return) {
         returned_value = interpreter->return_value;
+    } else if (succeeded && function->declaration->declared_type != TYPE_AUTO && function->declaration->declared_type != TYPE_VOID) {
+        runtime_error(interpreter, call->token, "typed function completed without returning a value");
+        succeeded = 0;
+    } else if (function->declaration->declared_type == TYPE_VOID) {
+        returned_value.type = VALUE_VOID;
     }
 
     pop_variables(interpreter, variable_start);
@@ -1265,10 +1478,15 @@ static int call_function(Interpreter *interpreter,
     interpreter->is_continuing = previous_continuing;
     interpreter->loop_depth = previous_loop_depth;
     interpreter->return_value = previous_return_value;
+    interpreter->return_type = previous_return_type;
     interpreter->frame_base = previous_frame_base;
     interpreter->global_limit = previous_global_limit;
 
     if (!succeeded) {
+        return 0;
+    }
+    if (value != NULL && returned_value.type == VALUE_VOID) {
+        runtime_error(interpreter, call->token, "void function cannot be used as a value");
         return 0;
     }
     /* The returned value's reference passes to the caller, or is dropped
@@ -1301,8 +1519,19 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                               "return can only be used inside a function");
                 return 0;
             }
-            if (!eval_expression(interpreter, stmt->expression, &value)) {
-                return 0;
+            if (interpreter->return_type == TYPE_VOID) {
+                if (stmt->expression != NULL) {
+                    runtime_error(interpreter, stmt->name, "void function cannot return a value");
+                    return 0;
+                }
+                value = make_number_value(0);
+                value.type = VALUE_VOID;
+            } else {
+                if (stmt->expression == NULL) {
+                    runtime_error(interpreter, stmt->name, "return requires a value in this function");
+                    return 0;
+                }
+                if (!eval_decl_expression(interpreter, stmt->expression, interpreter->return_type, &value)) return 0;
             }
             interpreter->return_value = value;
             interpreter->is_returning = 1;
@@ -1326,15 +1555,14 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             interpreter->is_continuing = 1;
             return 1;
         case STMT_LET_DECL:
-            if (!eval_expression(interpreter, stmt->expression, &value)) {
-                return 0;
-            }
-            return define_variable(interpreter, stmt->name, value, 0);
         case STMT_MUT_DECL:
-            if (!eval_expression(interpreter, stmt->expression, &value)) {
+            if (!eval_decl_expression(interpreter, stmt->expression, stmt->declared_type, &value)) return 0;
+            if (!define_variable(interpreter, stmt->name, value, stmt->kind == STMT_MUT_DECL)) {
+                value_release(interpreter, value);
                 return 0;
             }
-            return define_variable(interpreter, stmt->name, value, 1);
+            interpreter->variables[interpreter->variable_count - 1].declared_type = stmt->declared_type;
+            return 1;
         case STMT_ASSIGN: {
             Variable *variable = find_variable(interpreter, stmt->name);
             if (variable == NULL) {
@@ -1345,7 +1573,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 runtime_name_error(interpreter, stmt->name, "cannot assign to immutable variable");
                 return 0;
             }
-            if (!eval_expression(interpreter, stmt->expression, &value)) {
+            if (!eval_decl_expression(interpreter, stmt->expression, variable->declared_type, &value)) {
                 return 0;
             }
             {
@@ -1557,6 +1785,8 @@ int run_program(const char *path,
     interpreter.is_continuing = 0;
     interpreter.loop_depth = 0;
     interpreter.return_value = make_number_value(0);
+    interpreter.return_type = TYPE_AUTO;
+    interpreter.literal_type = TYPE_AUTO;
     interpreter.script_argument_count = script_argument_count;
     interpreter.script_arguments = script_arguments;
     interpreter.live_strings = NULL;

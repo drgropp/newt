@@ -1,0 +1,1 @@
+let legacy = 5; int n = int(legacy); fn old(a) { return a; } print old(n); double root = double(sqrt(9)); print root;

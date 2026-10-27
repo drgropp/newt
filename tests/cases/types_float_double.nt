@@ -1,0 +1,1 @@
+float half(float n) { return n / 2.0; } float a = 5.0; double b = 5.0; print half(a); print b / 2.0; print double(a) + b;

@@ -230,6 +230,7 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->body_count = 0;
     stmt->parameter_start = 0;
     stmt->parameter_count = 0;
+    stmt->declared_type = TYPE_AUTO;
     return stmt;
 }
 
@@ -260,6 +261,7 @@ static void add_top_level_statement(Parser *parser, Stmt *stmt) {
 
 static Expr *parse_expression(Parser *parser);
 static Stmt *parse_statement(Parser *parser);
+static Stmt *parse_function_declaration(Parser *parser, DeclType result_type, Token name, int typed);
 
 static Expr *finish_function_call(Parser *parser, Token name) {
     Expr *call = new_expr(parser, EXPR_CALL, name);
@@ -371,9 +373,42 @@ static Expr *parse_list_literal(Parser *parser, Token opening_bracket) {
     return list;
 }
 
+static DeclType token_decl_type(TokenType token) {
+    switch (token) {
+        case TOKEN_INT: return TYPE_INT;
+        case TOKEN_FLOAT: return TYPE_FLOAT;
+        case TOKEN_DOUBLE: return TYPE_DOUBLE;
+        case TOKEN_VOID: return TYPE_VOID;
+        case TOKEN_BOOL: return TYPE_BOOL;
+        case TOKEN_STRING_TYPE: return TYPE_STRING;
+        case TOKEN_LIST_TYPE: return TYPE_LIST;
+        default: return TYPE_AUTO;
+    }
+}
+
+static const char *parser_type_name(DeclType type) {
+    switch (type) {
+        case TYPE_INT: return "int";
+        case TYPE_FLOAT: return "float";
+        case TYPE_DOUBLE: return "double";
+        case TYPE_VOID: return "void";
+        case TYPE_BOOL: return "bool";
+        case TYPE_STRING: return "string";
+        case TYPE_LIST: return "list";
+        default: return "untyped";
+    }
+}
+
 static Expr *parse_primary(Parser *parser) {
     if (parser_match(parser, TOKEN_NUMBER)) {
         return new_expr(parser, EXPR_NUMBER, parser->previous);
+    }
+    if (parser->current.type == TOKEN_INT || parser->current.type == TOKEN_FLOAT ||
+        parser->current.type == TOKEN_DOUBLE) {
+        Token name = parser->current;
+        parser_advance(parser);
+        parser_consume(parser, TOKEN_LEFT_PAREN, "expected '(' after conversion type");
+        return finish_function_call(parser, name);
     }
     if (parser_match(parser, TOKEN_IDENT)) {
         Token name = parser->previous;
@@ -779,34 +814,36 @@ static void parser_consume_block_open(Parser *parser) {
     parser_skip_separators(parser);
 }
 
-static Stmt *parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
-    Token name;
+static Stmt *parse_named_declaration(Parser *parser, StmtKind kind, Token name, DeclType type) {
     Expr *initializer;
-    char message[64];
+    Stmt *stmt;
+    if (type == TYPE_VOID) {
+        parser_error(parser, name, "variables cannot have type void");
+        return NULL;
+    }
+    parser_consume(parser, TOKEN_EQUAL, "expected '=' after variable name");
+    initializer = parse_expression(parser);
+    parser_consume_statement_end(parser);
+    if (initializer == NULL || parser->had_error) return NULL;
+    stmt = new_stmt(parser, kind, name, initializer);
+    if (stmt != NULL) stmt->declared_type = type;
+    return stmt;
+}
 
+static Stmt *parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
+    DeclType type = token_decl_type(parser->current.type);
+    Token name;
+    char message[64];
+    if (type != TYPE_AUTO) parser_advance(parser);
+    else if (strcmp(keyword, "const") == 0) {
+        parser_error(parser, parser->current, "expected type after const");
+        return NULL;
+    }
     snprintf(message, sizeof(message), "expected identifier after %s", keyword);
     parser_consume(parser, TOKEN_IDENT, message);
-    if (parser->had_error) {
-        return NULL;
-    }
+    if (parser->had_error) return NULL;
     name = parser->previous;
-
-    parser_consume(parser, TOKEN_EQUAL, "expected '=' after variable name");
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    initializer = parse_expression(parser);
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    parser_consume_statement_end(parser);
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    return new_stmt(parser, kind, name, initializer);
+    return parse_named_declaration(parser, kind, name, type);
 }
 
 static Stmt *parse_print_statement(Parser *parser) {
@@ -889,9 +926,10 @@ static Stmt *parse_function_call(Parser *parser, Token name) {
 
 static Stmt *parse_return_statement(Parser *parser) {
     Token return_token = parser->previous;
-    Expr *value = parse_expression(parser);
+    Expr *value = NULL;
 
-    if (value == NULL || parser->had_error) {
+    if (parser->current.type != TOKEN_SEMICOLON) value = parse_expression(parser);
+    if (parser->had_error) {
         return NULL;
     }
 
@@ -992,19 +1030,18 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
     }
 }
 
-static Stmt *parse_function_declaration(Parser *parser) {
-    Token name;
+static Stmt *parse_function_declaration(Parser *parser, DeclType result_type, Token name, int typed) {
     Stmt *stmt;
     int body_start;
     int body_count;
     int parameter_start;
     int parameter_count = 0;
 
-    parser_consume(parser, TOKEN_IDENT, "expected function name after 'fn'");
-    if (parser->had_error) {
-        return NULL;
+    if (!typed) {
+        parser_consume(parser, TOKEN_IDENT, "expected function name after 'fn'");
+        if (parser->had_error) return NULL;
+        name = parser->previous;
     }
-    name = parser->previous;
 
     parser_consume(parser, TOKEN_LEFT_PAREN, "expected '(' after function name");
     if (parser->had_error) {
@@ -1012,9 +1049,17 @@ static Stmt *parse_function_declaration(Parser *parser) {
     }
 
     parameter_start = parser->parameter_count;
+    if (typed && parser_match(parser, TOKEN_VOID)) {
+        if (parser->current.type != TOKEN_RIGHT_PAREN) {
+            parser_error(parser, parser->current, "void must be the only parameter marker");
+            return NULL;
+        }
+    }
     if (parser->current.type != TOKEN_RIGHT_PAREN) {
         do {
             Token parameter;
+            DeclType parameter_type = TYPE_AUTO;
+            int parameter_mutable = typed;
             int parameter_index;
 
             if (parameter_count >= NEWT_MAX_FUNCTION_PARAMETERS) {
@@ -1024,6 +1069,16 @@ static Stmt *parse_function_declaration(Parser *parser) {
                 return NULL;
             }
 
+            if (typed) {
+                if (parser_match(parser, TOKEN_CONST) || parser_match(parser, TOKEN_LET)) parameter_mutable = 0;
+                else parser_match(parser, TOKEN_MUT);
+                parameter_type = token_decl_type(parser->current.type);
+                if (parameter_type == TYPE_AUTO || parameter_type == TYPE_VOID) {
+                    parser_error(parser, parser->current, "expected non-void parameter type");
+                    return NULL;
+                }
+                parser_advance(parser);
+            }
             parser_consume(parser, TOKEN_IDENT, "expected parameter name");
             if (parser->had_error) {
                 return NULL;
@@ -1033,7 +1088,7 @@ static Stmt *parse_function_declaration(Parser *parser) {
             for (parameter_index = parameter_start;
                  parameter_index < parser->parameter_count;
                  parameter_index++) {
-                Token existing = parser->parameters[parameter_index];
+                Token existing = parser->parameters[parameter_index].name;
                 if (existing.length == parameter.length &&
                     strncmp(existing.start,
                             parameter.start,
@@ -1048,11 +1103,13 @@ static Stmt *parse_function_declaration(Parser *parser) {
                                  &parser->parameter_capacity,
                                  parser->parameter_count,
                                  1,
-                                 sizeof(Token),
+                                 sizeof(Parameter),
                                  parameter)) {
                 return NULL;
             }
-            parser->parameters[parser->parameter_count] = parameter;
+            parser->parameters[parser->parameter_count].name = parameter;
+            parser->parameters[parser->parameter_count].type = parameter_type;
+            parser->parameters[parser->parameter_count].is_mutable = parameter_mutable;
             parser->parameter_count++;
             parameter_count++;
         } while (parser_match(parser, TOKEN_COMMA));
@@ -1087,6 +1144,7 @@ static Stmt *parse_function_declaration(Parser *parser) {
     stmt->body_count = body_count;
     stmt->parameter_start = parameter_start;
     stmt->parameter_count = parameter_count;
+    stmt->declared_type = result_type;
     return stmt;
 }
 
@@ -1251,6 +1309,21 @@ static Stmt *parse_for_statement(Parser *parser) {
 }
 
 static Stmt *parse_statement(Parser *parser) {
+    DeclType type = token_decl_type(parser->current.type);
+    if (type != TYPE_AUTO) {
+        Token name;
+        parser_advance(parser);
+        parser_consume(parser, TOKEN_IDENT, "expected name after type");
+        if (parser->had_error) return NULL;
+        name = parser->previous;
+        if (parser->current.type == TOKEN_LEFT_PAREN) {
+            return parse_function_declaration(parser, type, name, 1);
+        }
+        return parse_named_declaration(parser, STMT_MUT_DECL, name, type);
+    }
+    if (parser_match(parser, TOKEN_CONST)) {
+        return parse_declaration(parser, STMT_LET_DECL, "const");
+    }
     if (parser_match(parser, TOKEN_LET)) {
         return parse_declaration(parser, STMT_LET_DECL, "let");
     }
@@ -1260,7 +1333,7 @@ static Stmt *parse_statement(Parser *parser) {
     }
 
     if (parser_match(parser, TOKEN_FN)) {
-        return parse_function_declaration(parser);
+        return parse_function_declaration(parser, TYPE_AUTO, parser->previous, 0);
     }
 
     if (parser_match(parser, TOKEN_RETURN)) {
@@ -1315,23 +1388,38 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
         case STMT_LET_DECL:
             print_indent(indent);
             printf("LET_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            if (stmt->declared_type != TYPE_AUTO) {
+                print_indent(indent + 2);
+                printf("TYPE %s\n", parser_type_name(stmt->declared_type));
+            }
             print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_MUT_DECL:
             print_indent(indent);
             printf("MUT_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            if (stmt->declared_type != TYPE_AUTO) {
+                print_indent(indent + 2);
+                printf("TYPE %s\n", parser_type_name(stmt->declared_type));
+            }
             print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_FN_DECL:
             print_indent(indent);
             printf("FN_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            if (stmt->declared_type != TYPE_AUTO) {
+                print_indent(indent + 2);
+                printf("RETURNS %s\n", parser_type_name(stmt->declared_type));
+            }
             if (stmt->parameter_count > 0) {
                 print_indent(indent + 2);
                 printf("PARAMETERS\n");
                 for (i = 0; i < stmt->parameter_count; i++) {
-                    Token parameter = parser->parameters[stmt->parameter_start + i];
+                    Parameter metadata = parser->parameters[stmt->parameter_start + i];
+                    Token parameter = metadata.name;
                     print_indent(indent + 4);
-                    printf("PARAM name=%.*s\n", parameter.length, parameter.start);
+                    printf("PARAM name=%.*s", parameter.length, parameter.start);
+                    if (metadata.type != TYPE_AUTO) printf(" type=%s mutable=%d", parser_type_name(metadata.type), metadata.is_mutable);
+                    printf("\n");
                 }
             }
             print_indent(indent + 2);

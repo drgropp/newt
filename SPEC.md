@@ -24,15 +24,40 @@ Successful commands exit with status 0. File-loading, lexer, parser, runtime, an
 
 The semicolon in `;#` also terminates any preceding statement: `let fuel = 25;# starting fuel` is valid. Standalone comment lines and empty `;` statements are allowed. A plain `#` outside a string is an error. Semicolons inside strings are text. Multiple statements may share a line; expressions remain line-oriented for now.
 
-## Planned systems types
+## C-style typed declarations and functions
 
-The planned numeric type names are `int`, `float`, and `double`, following C. These are not implemented yet: current numbers still use C `double`. Before adding the types, define their sizes, conversions, and C interoperability for each compilation target.
+Supported forms include `int n = 25;`, `mut int n = 25;`, `let int n = 25;`, and `const int n = 25;`. Plain declarations and `mut` permit reassignment; `let` and `const` forbid it. Conflicting qualifier combinations are rejected. An initializer is required. The numeric types are `int`, `float`, and `double`; `bool`, `string`, and `list` also name existing value categories. No pointer-level const qualification or native layout is implemented.
+
+```newt
+int add(int a, const int b) {
+    a = a + b;
+    return a;
+}
+
+void greet(void) {
+    print "hello world";
+    return;
+}
+
+greet();
+print add(2, 3);
+```
+
+C-style parameters require a type and a name. They are mutable local copies by default; `const` and `let` make a parameter binding read-only, while `mut` makes mutability explicit. Lists retain shared storage. Empty `()` and `(void)` both specify no parameters; `void` cannot appear alongside other parameters. Typed functions require bodies; prototypes are unsupported.
+
+Type compatibility is checked during interpretation at declarations, assignments, arguments, and returns. No whole-program static checker exists yet. A non-void typed function must return a matching value on its executed path; fallthrough is a runtime error. Void functions may use `return;` or fall through, but cannot return an expression or be used as a value. Existing `fn` functions retain immutable untyped parameters and their existing default numeric-zero return; a bare `return;` is invalid when such a function runs.
+
+The interpreter requires signed 32-bit host C `int`, binary32 `float`, and binary64 `double`, checked when building. Numeric values carry a type tag and actual integer/float/double payloads, plus a double view for existing built-ins. These are interpreter representations, not native struct-layout or C ABI guarantees.
+
+An expected numeric type determines literal and literal-expression arithmetic. Literal-only operands alongside typed operands adopt the typed operand's type. Integer division truncates toward zero, checked integer arithmetic rejects overflow, and typed float arithmetic rounds to binary32. Typed floating arithmetic rejects non-finite results; finite underflow follows host rounding, potentially producing zero. Distinct numeric types require explicit conversion, including comparisons. Use `int(expr)`, `float(expr)`, and `double(expr)` with exactly one numeric argument. Explicit integer conversion truncates toward zero and checks range. Implicit contextual integer initialization rejects fractional literals. Float conversion checks range; double conversion preserves the numeric value. Numeric built-ins still return compatibility-mode double-based numbers and require explicit conversion when entering typed bindings.
+
+Existing untyped `let`, `mut`, and `fn` forms remain supported during migration. The new type names and `const` are reserved keywords; existing identifiers with those names must be renamed (the old `double` example helper is now `twice`). `start:`, automatic entry calls, static checking, pointers, and assembly are not implemented.
 
 ## Values
 
 Newt currently has four value types:
 
-- numbers, stored as C `double` values;
+- numbers, with typed C `int`, `float`, and `double` payloads or compatibility-mode double-based values;
 - strings, delimited by double quotes;
 - booleans, written as `true` or `false`;
 - lists, written as comma-separated expressions inside `[` and `]`.

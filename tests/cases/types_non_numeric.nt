@@ -1,0 +1,1 @@
+string echo(const string s) { return s; } bool yes(void) { return true; } list items(void) { return [1, 2]; } let string s = echo("newt"); bool ok = yes(); mut list a = items(); append(a, 3); print s; print ok; print length(a);

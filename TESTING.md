@@ -79,6 +79,11 @@ git diff --check
 
 The focused suite currently checks:
 
+- C-style type keywords and parse metadata, qualified declarations, parameter mutability, recursion, and parameter-pool growth;
+- distinct integer/float/double arithmetic, float rounding, explicit casts, numeric limits, overflow, and division by zero;
+- argument, assignment, and return type mismatches, void behavior, and missing returns on executed paths;
+- preservation of existing untyped programs alongside typed programs;
+
 - brace tokens, nested and empty blocks, either brace placement, and `else if`/`else`;
 - missing/extra braces, rejection of old `end` closers, and rejection of unimplemented assembly blocks;
 

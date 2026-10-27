@@ -1,0 +1,1 @@
+int same(const int n) { return n; } int value = 9; print same(value); print value;

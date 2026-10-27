@@ -5,6 +5,17 @@
 
 #include "lexer.h"
 
+/* TYPE_AUTO is the compatibility type for existing untyped code. */
+typedef enum {
+    TYPE_AUTO, TYPE_INT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_VOID,
+    TYPE_BOOL, TYPE_STRING, TYPE_LIST
+} DeclType;
+typedef struct {
+    Token name;
+    DeclType type;
+    int is_mutable;
+} Parameter;
+
 typedef enum {
     EXPR_NUMBER,
     EXPR_IDENT,
@@ -56,6 +67,7 @@ typedef struct {
     int body_count;
     int parameter_start;
     int parameter_count;
+    DeclType declared_type;
 } Stmt;
 struct Expr {
     ExprKind kind;
@@ -85,7 +97,7 @@ typedef struct {
     Stmt *statements;
     int statement_count;
     int statement_capacity;
-    Token *parameters;
+    Parameter *parameters;
     int parameter_count;
     int parameter_capacity;
     Expr **call_arguments;
