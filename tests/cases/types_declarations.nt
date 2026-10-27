@@ -1,0 +1,1 @@
+int fuel = 25; mut int used = 1; let int capacity = 100; const int reserve = 2; fuel = fuel - used; print fuel; print capacity; print reserve;

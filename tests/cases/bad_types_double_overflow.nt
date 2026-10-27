@@ -1,0 +1,1 @@
+double n = double(pow(10, 308)); print n * 10;

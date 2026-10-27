@@ -1,0 +1,1 @@
+float a = 16777217; double b = 16777217; print a == 16777216; print b == 16777217; float c = 16777216; c = c + 1; print c == 16777216;

@@ -106,6 +106,15 @@ int token_text_equals(Token token, const char *text) {
 }
 
 static TokenType keyword_type(Token token) {
+    if (token_text_equals(token, "int")) return TOKEN_INT;
+    if (token_text_equals(token, "float")) return TOKEN_FLOAT;
+    if (token_text_equals(token, "double")) return TOKEN_DOUBLE;
+    if (token_text_equals(token, "void")) return TOKEN_VOID;
+    if (token_text_equals(token, "bool")) return TOKEN_BOOL;
+    if (token_text_equals(token, "string")) return TOKEN_STRING_TYPE;
+    if (token_text_equals(token, "list")) return TOKEN_LIST_TYPE;
+    if (token_text_equals(token, "const")) return TOKEN_CONST;
+
     if (token_text_equals(token, "let")) {
         return TOKEN_LET;
     }
@@ -376,6 +385,14 @@ static const char *token_type_name(TokenType type) {
             return "NUMBER";
         case TOKEN_STRING:
             return "STRING";
+        case TOKEN_INT: return "INT";
+        case TOKEN_FLOAT: return "FLOAT";
+        case TOKEN_DOUBLE: return "DOUBLE";
+        case TOKEN_VOID: return "VOID";
+        case TOKEN_BOOL: return "BOOL";
+        case TOKEN_STRING_TYPE: return "STRING_TYPE";
+        case TOKEN_LIST_TYPE: return "LIST_TYPE";
+        case TOKEN_CONST: return "CONST";
         case TOKEN_LET:
             return "LET";
         case TOKEN_MUT:

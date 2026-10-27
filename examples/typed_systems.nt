@@ -1,0 +1,22 @@
+;# Typed C-style functions; entry-point selection is a later milestone.
+int consume(int fuel, const int amount) {
+    fuel = fuel - amount;
+    return fuel;
+}
+
+void main(void) {
+    const int capacity = 25;
+    mut int fuel = capacity;
+    let float temperature = 21.5;
+    double precise = 0.000001;
+
+    fuel = consume(fuel, 1);
+    print fuel;
+    print temperature;
+    print precise;
+    print double(fuel) / 2.0;
+    return;
+}
+
+;# Current Newt still requires an explicit call.
+main();

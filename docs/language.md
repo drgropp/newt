@@ -2,6 +2,34 @@
 
 Newt is an experimental systems-language project currently implemented as an interpreter. Simple statements require `;`, even at the end of a file. Blocks use `{ }`; the opening brace may be on the header line or the following line. A closing `}` needs no semicolon.
 
+## C-style types
+
+```newt
+int fuel = 25;
+mut int remaining = fuel;
+let float temperature = 21.5;
+const double precision = 0.000001;
+
+int consume(int amount) {
+    remaining = remaining - amount;
+    return remaining;
+}
+
+void greet(void) {
+    print "hello world";
+    return;
+}
+
+greet();
+print consume(1);
+```
+
+The type goes before the name. Plain declarations and `mut` are mutable. `let` and `const` make a binding read-only. Numeric types have distinct 32-bit integer, binary32 float, and binary64 double behavior in the current interpreter target. `bool`, `string`, and `list` are also supported. Initializers are required.
+
+Numeric literals adopt the expected type; already-typed values need explicit conversions such as `double(fuel)` or `int(2.9)`. Integer conversion truncates toward zero and checks range. Integer arithmetic checks overflow and division by zero; `int half = 5 / 2;` yields 2. Typed parameters are mutable local copies unless marked `const` or `let`; lists still share their storage.
+
+Return types and argument types are enforced during execution. Void functions cannot produce values, and non-void typed functions cannot fall through. This is still an interpreter, not a whole-program static checker. `start:` is not available yet; call functions explicitly. Existing untyped declarations and `fn` functions below remain supported during migration.
+
 ## Variables
 
 Use `let` for a value that cannot be reassigned. Use `mut` when the value needs to change.

@@ -1,0 +1,1 @@
+int low = -2147483648; int high = 2147483647; print low; print high; print int(-2.9); print float(5); print double(5);

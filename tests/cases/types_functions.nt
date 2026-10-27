@@ -1,0 +1,1 @@
+int add(int a, int b) { a = a + b; return a; } void greet(void) { print "hello"; return; } greet(); print add(2, 3);

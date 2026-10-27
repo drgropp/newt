@@ -1,0 +1,1 @@
+void change(int n) { n = 9; print n; } int n = 2; change(n); print n;

@@ -1,0 +1,1 @@
+int wrong(void n) { return 1; }

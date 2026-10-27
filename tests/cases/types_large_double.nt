@@ -1,0 +1,1 @@
+double huge = double(pow(10, 100)); print huge; list values = [huge]; print values;
