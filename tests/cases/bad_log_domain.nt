@@ -1,1 +1,1 @@
-print log(0)
+print log(0);

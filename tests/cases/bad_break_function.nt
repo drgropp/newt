@@ -1,7 +1,8 @@
 fn stop()
-    break
-end
+    break;
+end;
 
 while true
-    stop()
-end
+    stop();
+end;
+

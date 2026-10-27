@@ -1,7 +1,7 @@
-# sqrt works with number literals and variables.
+;# sqrt works with number literals and variables.
 
-print sqrt(25)
+print sqrt(25);
 
-let x = 49
-print sqrt(x)
+let x = 49;
+print sqrt(x);
 

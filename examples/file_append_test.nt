@@ -1,7 +1,7 @@
-# File append test
+;# File append test
 
-file_write("examples/out_append.txt", "line one")
-file_append("examples/out_append.txt", "\nline two")
-let text = file_read("examples/out_append.txt")
-print text
+file_write("examples/out_append.txt", "line one");
+file_append("examples/out_append.txt", "\nline two");
+let text = file_read("examples/out_append.txt");
+print text;
 

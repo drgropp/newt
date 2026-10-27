@@ -1,5 +1,5 @@
-print length([])
+print length([]);
 
-let items = ["newt", "ghostnote", "stray signal"]
-print length(items)
-print length([[1], [2]])
+let items = ["newt", "ghostnote", "stray signal"];
+print length(items);
+print length([[1], [2]]);

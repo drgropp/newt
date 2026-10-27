@@ -1,9 +1,9 @@
 fn peek()
-    print hidden
-end
+    print hidden;
+end;
 
 if true
-    let hidden = 1
-    peek()
-end
+    let hidden = 1;
+    peek();
+end;
 

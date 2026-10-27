@@ -1,14 +1,14 @@
-mut count = 0
+mut count = 0;
 
 while count < 3
-    print count
-    count = count + 1
-end
+    print count;
+    count = count + 1;
+end;
 
-mut skipped = 0
+mut skipped = 0;
 while false
-    skipped = 1
-end
+    skipped = 1;
+end;
 
-print count
-print skipped
+print count;
+print skipped;

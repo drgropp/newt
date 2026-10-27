@@ -1,5 +1,5 @@
-mut items = ["sword"]
-append(items, "shield")
-items[0] = "wand"
-print items[0]
-print items[1]
+mut items = ["sword"];
+append(items, "shield");
+items[0] = "wand";
+print items[0];
+print items[1];

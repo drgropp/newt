@@ -1,6 +1,6 @@
-# File write test
+;# File write test
 
-file_write("examples/out_note.txt", "hello from Newt")
-let text = file_read("examples/out_note.txt")
-print text
+file_write("examples/out_note.txt", "hello from Newt");
+let text = file_read("examples/out_note.txt");
+print text;
 

@@ -1,0 +1,4 @@
+fn add(a, b); return a + b; end;
+if true; print add(2, 3); else; print 0; end;
+mut n = 0; while n < 2; n = n + 1; end; print n;
+for item in [1, 2]; if item == 1; continue; end; print item; break; end;

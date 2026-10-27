@@ -1,10 +1,10 @@
-# Newt development log
+;# Newt development log
 
 if arg_count() == 0
-  print "Usage: newt examples/devlog.nt \"message\""
+  print "Usage: newt examples/devlog.nt \"message\"";
 else
-   let message = arg(0)
+   let message = arg(0);
    file_append("examples/devlog.md", message + ""\n")
-   print "Dev log saved."
-end
+   print "Dev log saved.";
+end;
 

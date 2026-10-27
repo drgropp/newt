@@ -1,13 +1,13 @@
-# Solve x^2 - 5x + 6 = 0 with the quadratic formula.
+;# Solve x^2 - 5x + 6 = 0 with the quadratic formula.
 
-let a = 1
-let b = 0 - 5
-let c = 6
-let discriminant = b * b - 4 * a * c
+let a = 1;
+let b = 0 - 5;
+let c = 6;
+let discriminant = b * b - 4 * a * c;
 
-let root1 = (0 - b + sqrt(discriminant)) / (2 * a)
-let root2 = (0 - b - sqrt(discriminant)) / (2 * a)
+let root1 = (0 - b + sqrt(discriminant)) / (2 * a);
+let root2 = (0 - b - sqrt(discriminant)) / (2 * a);
 
-print root1
-print root2
+print root1;
+print root2;
 

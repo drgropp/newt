@@ -1,2 +1,2 @@
-let items = [10, 20, 30]
-print items[1.5]
+let items = [10, 20, 30];
+print items[1.5];

@@ -91,8 +91,9 @@ static void parser_consume(Parser *parser, TokenType type, const char *message) 
     parser_error(parser, parser->current, message);
 }
 
-static void parser_skip_newlines(Parser *parser) {
-    while (!parser->had_error && parser->current.type == TOKEN_NEWLINE) {
+static void parser_skip_separators(Parser *parser) {
+    while (!parser->had_error && (parser->current.type == TOKEN_NEWLINE ||
+                                    parser->current.type == TOKEN_SEMICOLON)) {
         parser_advance(parser);
     }
 }
@@ -756,17 +757,21 @@ static void print_expression_tree(Parser *parser, Expr *expr, int indent) {
     }
 }
 
+/* Simple statements and block closers require an explicit terminator. */
 static void parser_consume_statement_end(Parser *parser) {
-    if (parser->current.type == TOKEN_NEWLINE) {
-        parser_skip_newlines(parser);
+    parser_consume(parser, TOKEN_SEMICOLON, "expected ';' after statement");
+    parser_skip_separators(parser);
+}
+
+/* Block headers retain their line break; a semicolon also permits inline blocks. */
+static void parser_consume_block_header_end(Parser *parser) {
+    if (parser->current.type == TOKEN_NEWLINE ||
+        parser->current.type == TOKEN_SEMICOLON) {
+        parser_advance(parser);
+        parser_skip_separators(parser);
         return;
     }
-
-    if (parser->current.type == TOKEN_EOF) {
-        return;
-    }
-
-    parser_error(parser, parser->current, "expected end of statement");
+    parser_error(parser, parser->current, "expected newline or ';' after block header");
 }
 
 static Stmt *parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
@@ -947,7 +952,7 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
 
     *start = 0;
     *count = 0;
-    parser_skip_newlines(parser);
+    parser_skip_separators(parser);
 
     while (!parser->had_error &&
            parser->current.type != TOKEN_EOF &&
@@ -967,7 +972,7 @@ static void parse_block(Parser *parser, TokenType stop_one, TokenType stop_two, 
             parser->block_scratch[parser->block_scratch_count] = statement_index(parser, stmt);
             parser->block_scratch_count++;
         }
-        parser_skip_newlines(parser);
+        parser_skip_separators(parser);
     }
     if (parser->had_error) {
         return;
@@ -1053,7 +1058,7 @@ static Stmt *parse_function_declaration(Parser *parser) {
         return NULL;
     }
 
-    parser_consume_statement_end(parser);
+    parser_consume_block_header_end(parser);
     if (parser->had_error) {
         return NULL;
     }
@@ -1094,7 +1099,8 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
     int else_count = 0;
     int has_else = 0;
 
-    if (parser->current.type == TOKEN_NEWLINE ||
+    if (parser->current.type == TOKEN_SEMICOLON ||
+        parser->current.type == TOKEN_NEWLINE ||
         parser->current.type == TOKEN_EOF ||
         parser->current.type == TOKEN_ELSE ||
         parser->current.type == TOKEN_END) {
@@ -1110,7 +1116,7 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
         return NULL;
     }
 
-    parser_consume_statement_end(parser);
+    parser_consume_block_header_end(parser);
     if (parser->had_error) {
         return NULL;
     }
@@ -1139,7 +1145,7 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
             }
             else_count = 1;
         } else {
-            parser_consume_statement_end(parser);
+            parser_consume_block_header_end(parser);
             if (parser->had_error) {
                 return NULL;
             }
@@ -1192,7 +1198,7 @@ static Stmt *parse_while_statement(Parser *parser) {
         return NULL;
     }
 
-    parser_consume_statement_end(parser);
+    parser_consume_block_header_end(parser);
     if (parser->had_error) {
         return NULL;
     }
@@ -1240,7 +1246,8 @@ static Stmt *parse_for_statement(Parser *parser) {
         return NULL;
     }
 
-    if (parser->current.type == TOKEN_NEWLINE ||
+    if (parser->current.type == TOKEN_SEMICOLON ||
+        parser->current.type == TOKEN_NEWLINE ||
         parser->current.type == TOKEN_EOF ||
         parser->current.type == TOKEN_END) {
         parser_error(parser, parser->current, "expected iterable expression after 'in'");
@@ -1251,7 +1258,7 @@ static Stmt *parse_for_statement(Parser *parser) {
         return NULL;
     }
 
-    parser_consume_statement_end(parser);
+    parser_consume_block_header_end(parser);
     if (parser->had_error) {
         return NULL;
     }
@@ -1465,12 +1472,12 @@ int parse_program(Parser *parser) {
         return 0;
     }
 
-    parser_skip_newlines(parser);
+    parser_skip_separators(parser);
 
     while (!parser->had_error && parser->current.type != TOKEN_EOF) {
         Stmt *stmt = parse_statement(parser);
         add_top_level_statement(parser, stmt);
-        parser_skip_newlines(parser);
+        parser_skip_separators(parser);
     }
 
     if (parser->had_error) {

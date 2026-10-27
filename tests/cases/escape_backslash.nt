@@ -1,2 +1,2 @@
-print "C:\\Newt"
-print "\\n"
+print "C:\\Newt";
+print "\\n";

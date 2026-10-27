@@ -1,8 +1,8 @@
-let names = ["newt", "ghostnote", "stray signal"]
-let name = "outer"
+let names = ["newt", "ghostnote", "stray signal"];
+let name = "outer";
 
 for name in names
-    print name
-end
+    print name;
+end;
 
-print name
+print name;

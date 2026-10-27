@@ -8,6 +8,7 @@
 typedef enum {
     TOKEN_EOF,
     TOKEN_NEWLINE,
+    TOKEN_SEMICOLON,
     TOKEN_UNKNOWN,
     TOKEN_ERROR,
     TOKEN_IDENT,

@@ -1,9 +1,10 @@
-mut number = 0
+mut number = 0;
 
 while number < 6
-    number = number + 1
+    number = number + 1;
     if number == 3
-        continue
-    end
-    print number
-end
+        continue;
+    end;
+    print number;
+end;
+

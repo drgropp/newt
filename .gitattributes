@@ -7,3 +7,7 @@
 *.ps1 text eol=lf
 *.bat text eol=crlf
 Makefile text eol=lf
+
+
+# Preserve the deliberate CRLF lexer fixture on every platform.
+tests/cases/semicolon_crlf.nt -text

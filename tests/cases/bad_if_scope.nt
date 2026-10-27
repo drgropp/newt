@@ -1,6 +1,6 @@
 if true
-    let hidden = 12
-    print hidden
-end
-print hidden
+    let hidden = 12;
+    print hidden;
+end;
+print hidden;
 

@@ -1,5 +1,5 @@
-# Read a complete text file
+;# Read a complete text file
 
-let text = file_read("examples/sample.txt")
-print text
+let text = file_read("examples/sample.txt");
+print text;
 

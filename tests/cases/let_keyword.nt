@@ -1,5 +1,5 @@
-let score = 10
-print score
-mut health = 10
-health = 9
-print health
+let score = 10;
+print score;
+mut health = 10;
+health = 9;
+print health;

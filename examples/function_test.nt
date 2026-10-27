@@ -1,13 +1,14 @@
-# Function test
+;# Function test
 
 fn greet()
-    print "hello from function"
-end
+    print "hello from function";
+end;
 
 fn farm()
-    print "plant carrot"
-    print "water crop"
-end
+    print "plant carrot";
+    print "water crop";
+end;
 
-greet()
-farm()
+greet();
+farm();
+

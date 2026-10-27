@@ -1,12 +1,13 @@
-# Return test
+;# Return test
 
 fn get_name()
-    return "Newt"
-end
+    return "Newt";
+end;
 
 fn is_ready()
-    return true
-end
+    return true;
+end;
 
-print get_name()
-print is_ready()
+print get_name();
+print is_ready();
+

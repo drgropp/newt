@@ -1,0 +1,1 @@
+let fuel = 25; mut used = 0; used = used + 1; print fuel - used;

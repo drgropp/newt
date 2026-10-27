@@ -1,2 +1,2 @@
-mut items = ["sword", "shield"]
-items[2] = "bow"
+mut items = ["sword", "shield"];
+items[2] = "bow";

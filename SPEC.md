@@ -4,7 +4,7 @@ This document describes the language implemented by Newt 0.1.0. It is a snapshot
 
 ## Source files and execution
 
-Newt source files conventionally use the `.nt` extension. Statements are line-oriented. Blank lines are allowed, and `#` starts a comment that continues to the end of the line.
+Newt source files conventionally use the `.nt` extension. Simple statements and block-closing `end` require `;`. Block headers end with a newline or `;`. Blank lines are allowed, and `;#` starts a comment that continues to the end of the line.
 
 Run a source file directly or with `--run`:
 
@@ -21,6 +21,12 @@ newt --parse example.nt
 ```
 
 Successful commands exit with status 0. File-loading, lexer, parser, runtime, and CLI failures are written to standard error and exit nonzero. Program output, token output, parse trees, help, and version information are written to standard output.
+
+The semicolon in `;#` also terminates any preceding statement: `let fuel = 25;# starting fuel` is valid. Standalone comment lines and empty `;` statements are allowed. A plain `#` outside a string is an error. Semicolons inside strings are text. Multiple statements may share a line; expressions remain line-oriented for now.
+
+## Planned systems types
+
+The planned numeric type names are `int`, `float`, and `double`, following C. These are not implemented yet: current numbers still use C `double`. Before adding the types, define their sizes, conversions, and C interoperability for each compilation target.
 
 ## Values
 
@@ -52,9 +58,9 @@ Escape pairs remain in their original spelling in lexer tokens and parse-tree ou
 The former declaration keyword `val` is no longer supported; update existing declarations to `let`. `val` is now an ordinary identifier.
 
 ```newt
-let name = "Ada"
-mut score = 10
-score = score + 5
+let name = "Ada";
+mut score = 10;
+score = score + 5;
 ```
 
 Reassigning a `let`, mutating a list through a `let` access path, assigning an undefined variable, or defining the same variable twice in one scope is a runtime error. Function parameters behave as immutable local variables, including when their values are lists. Function-local variables are discarded when the call returns.
@@ -66,9 +72,9 @@ Names are resolved lexically. Code inside a function sees its own parameters and
 `print` evaluates one expression and writes its value to standard output.
 
 ```newt
-print "hello"
-print 2 + 3
-print true
+print "hello";
+print 2 + 3;
+print true;
 ```
 
 `print` normally adds a newline. When a string already ends in a newline, it does not add another one.
@@ -78,21 +84,21 @@ print true
 Parentheses may group expressions. From highest to lowest precedence, operators are:
 
 1. postfix list indexing with `[index]`;
-2. unary `not` and unary `-`;
+2. unary `!` and unary `-`;
 3. `*` and `/`;
 4. `+` and `-`;
 5. `<`, `<=`, `>`, and `>=`;
 6. `==` and `!=`;
-7. `and`;
-8. `or`.
+7. `&&`;
+8. `||`.
 
-Arithmetic and ordered comparisons require numbers. Division by zero is a runtime error. Unary minus requires a number. `and`, `or`, and `not` require booleans; `and` and `or` short-circuit.
+Arithmetic and ordered comparisons require numbers. Division by zero is a runtime error. Unary minus requires a number. `&&`, `||`, and `!` require booleans; `&&` and `||` short-circuit.
 
 `+` adds two numbers or concatenates two strings:
 
 ```newt
-print 20 + 22
-print "hello " + "world"
+print 20 + 22;
+print "hello " + "world";
 ```
 
 Newt does not implicitly convert mixed operands. For example, `"count: " + 2` is a runtime error; use `"count: " + text(2)` instead.
@@ -113,12 +119,12 @@ An `if` block may contain any number of `else if` branches and an optional final
 
 ```newt
 if temperature < 0
-    print "freezing"
+    print "freezing";
 else if temperature < 20
-    print "cool"
+    print "cool";
 else
-    print "warm"
-end
+    print "warm";
+end;
 ```
 
 ## Loops
@@ -126,20 +132,20 @@ end
 `while` repeats its body while its condition is truthy. `end` closes the loop.
 
 ```newt
-mut count = 0
+mut count = 0;
 while count < 3
-    print count
-    count = count + 1
-end
+    print count;
+    count = count + 1;
+end;
 ```
 
 `for` evaluates its iterable expression once, requires the result to be a list, captures its starting length, and executes its body once for each of those elements from first to last. Mutations completed before the loop are visible. Appending during the loop does not extend the current loop. An empty list executes the body zero times. A non-list result is a runtime error.
 
 ```newt
-let names = ["newt", "ghostnote", "stray signal"]
+let names = ["newt", "ghostnote", "stray signal"];
 for name in names
-    print name
-end
+    print name;
+end;
 ```
 
 The loop variable is an immutable, iteration-local binding containing the current element. It may shadow a variable in an outer scope. The binding and any other variables declared during that iteration are discarded before the next iteration and are not visible after the loop.
@@ -158,10 +164,10 @@ Declare a function with `fn`, a name, a parenthesized parameter list, a body, an
 
 ```newt
 fn add(a, b)
-    return a + b
-end
+    return a + b;
+end;
 
-print add(2, 3)
+print add(2, 3);
 ```
 
 Functions may have no parameters. Arguments are evaluated before entering the function. Calls require exactly the declared number of arguments. `return` evaluates one expression, exits the current function, and supplies that value to the caller. Using `return` outside a function is a runtime error.

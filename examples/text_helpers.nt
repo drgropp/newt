@@ -1,8 +1,8 @@
-let raw = "  Build Project  "
-let command = trim(raw)
+let raw = "  Build Project  ";
+let command = trim(raw);
 
-print upper(command)
-print lower(command)
-print "characters=" + text(len(command))
-print contains(lower(command), "build")
+print upper(command);
+print lower(command);
+print "characters=" + text(len(command));
+print contains(lower(command), "build");
 

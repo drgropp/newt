@@ -1,2 +1,2 @@
 let name = "newt
-let x = 10 @ 3
+let x = 10 @ 3;

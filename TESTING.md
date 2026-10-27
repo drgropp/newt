@@ -79,6 +79,11 @@ git diff --check
 
 The focused suite currently checks:
 
+- required semicolons at newlines, end of file, and block closers;
+- multiple statements per line and inline blocks;
+- standalone and trailing `;#` comments, CRLF, and token columns;
+- comment markers inside strings and rejection of old `#` comments;
+
 - an existing positive example;
 - string concatenation;
 - each supported string escape: `\n`, `\t`, `\r`, `\\`, and `\"`;

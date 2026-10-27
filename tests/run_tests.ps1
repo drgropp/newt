@@ -16,6 +16,90 @@ function Normalize-Newlines([string]$Text) {
 
 $Tests = @(
     @{
+        Name = "semicolon_inline"
+        Arguments = "tests/cases/semicolon_inline.nt"
+        ExitCode = 0
+        Stdout = "24`n"
+        Stderr = ""
+    },
+    @{
+        Name = "semicolon_blocks"
+        Arguments = "tests/cases/semicolon_blocks.nt"
+        ExitCode = 0
+        Stdout = "5`n2`n2`n"
+        Stderr = ""
+    },
+    @{
+        Name = "semicolon_comments"
+        Arguments = "tests/cases/semicolon_comments.nt"
+        ExitCode = 0
+        Stdout = "25`n"
+        Stderr = ""
+    },
+    @{
+        Name = "semicolon_strings"
+        Arguments = "tests/cases/semicolon_strings.nt"
+        ExitCode = 0
+        Stdout = "a;#b#c;`nescaped `";# is still text`n"
+        Stderr = ""
+    },
+    @{
+        Name = "semicolon_crlf"
+        Arguments = "tests/cases/semicolon_crlf.nt"
+        ExitCode = 0
+        Stdout = "2`n"
+        Stderr = ""
+    },
+    @{
+        Name = "semicolon_empty"
+        Arguments = "tests/cases/semicolon_empty.nt"
+        ExitCode = 0
+        Stdout = "1`n"
+        Stderr = ""
+    },
+    @{
+        Name = "bad_missing_semicolon"
+        Arguments = "tests/cases/bad_missing_semicolon.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_missing_semicolon.nt:1:14: parse error: expected ';' after statement`n"
+    },
+    @{
+        Name = "bad_missing_semicolon_eof"
+        Arguments = "tests/cases/bad_missing_semicolon_eof.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_missing_semicolon_eof.nt:1:9: parse error: expected ';' after statement`n"
+    },
+    @{
+        Name = "bad_missing_end_semicolon"
+        Arguments = "tests/cases/bad_missing_end_semicolon.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_missing_end_semicolon.nt:3:4: parse error: expected ';' after statement`n"
+    },
+    @{
+        Name = "bad_missing_body_semicolon"
+        Arguments = "tests/cases/bad_missing_body_semicolon.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_missing_body_semicolon.nt:2:12: parse error: expected ';' after statement`n"
+    },
+    @{
+        Name = "bad_hash_comment"
+        Arguments = "tests/cases/bad_hash_comment.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_hash_comment.nt:1:1: lexer error: unknown character '#'`n"
+    },
+    @{
+        Name = "semicolon_comment_column"
+        Arguments = "--tokens tests/cases/semicolon_comment_column.nt"
+        ExitCode = 0
+        Stdout = "1:1 SEMICOLON ;`n1:8 NEWLINE`n2:1 PRINT print`n2:7 NUMBER 1`n2:8 SEMICOLON ;`n2:19 NEWLINE`n3:1 PRINT print`n3:7 NUMBER 2`n3:8 SEMICOLON ;`n3:9 EOF`n"
+        Stderr = ""
+    },
+    @{
         Name = "let declaration and mutable assignment"
         Arguments = "tests/cases/let_keyword.nt"
         ExitCode = 0
@@ -26,7 +110,7 @@ $Tests = @(
         Name = "let token output"
         Arguments = "--tokens tests/cases/let_keyword.nt"
         ExitCode = 0
-        Stdout = "1:1 LET let`n1:5 IDENT score`n1:11 EQUAL =`n1:13 NUMBER 10`n1:15 NEWLINE`n2:1 PRINT print`n2:7 IDENT score`n2:12 NEWLINE`n3:1 MUT mut`n3:5 IDENT health`n3:12 EQUAL =`n3:14 NUMBER 10`n3:16 NEWLINE`n4:1 IDENT health`n4:8 EQUAL =`n4:10 NUMBER 9`n4:11 NEWLINE`n5:1 PRINT print`n5:7 IDENT health`n5:13 NEWLINE`n6:1 EOF`n"
+        Stdout = "1:1 LET let`n1:5 IDENT score`n1:11 EQUAL =`n1:13 NUMBER 10`n1:15 SEMICOLON ;`n1:16 NEWLINE`n2:1 PRINT print`n2:7 IDENT score`n2:12 SEMICOLON ;`n2:13 NEWLINE`n3:1 MUT mut`n3:5 IDENT health`n3:12 EQUAL =`n3:14 NUMBER 10`n3:16 SEMICOLON ;`n3:17 NEWLINE`n4:1 IDENT health`n4:8 EQUAL =`n4:10 NUMBER 9`n4:11 SEMICOLON ;`n4:12 NEWLINE`n5:1 PRINT print`n5:7 IDENT health`n5:13 SEMICOLON ;`n5:14 NEWLINE`n6:1 EOF`n"
         Stderr = ""
     },
     @{
@@ -467,7 +551,7 @@ $Tests = @(
         Name = "lexer match columns"
         Arguments = "--tokens tests/cases/lexer_columns.nt"
         ExitCode = 0
-        Stdout = "1:1 PRINT print`n1:7 NUMBER 1`n1:9 EQUAL_EQUAL ==`n1:12 NUMBER 2`n1:13 NEWLINE`n2:1 PRINT print`n2:7 NUMBER 3`n2:9 BANG_EQUAL !=`n2:12 NUMBER 4`n2:13 NEWLINE`n3:1 EOF`n"
+        Stdout = "1:1 PRINT print`n1:7 NUMBER 1`n1:9 EQUAL_EQUAL ==`n1:12 NUMBER 2`n1:13 SEMICOLON ;`n1:14 NEWLINE`n2:1 PRINT print`n2:7 NUMBER 3`n2:9 BANG_EQUAL !=`n2:12 NUMBER 4`n2:13 SEMICOLON ;`n2:14 NEWLINE`n3:1 EOF`n"
         Stderr = ""
     },
     @{
