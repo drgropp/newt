@@ -1,2 +1,2 @@
-val items = [10, 20, 30]
+let items = [10, 20, 30]
 print items[3]

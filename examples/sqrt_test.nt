@@ -2,5 +2,6 @@
 
 print sqrt(25)
 
-val x = 49
+let x = 49
 print sqrt(x)
+

@@ -1,7 +1,7 @@
 # Else-if test
 
 # Middle branch
-val crop = 2
+let crop = 2
 
 if crop == 1
     print "carrot"
@@ -14,7 +14,7 @@ else
 end
 
 # First branch
-val first_crop = 1
+let first_crop = 1
 
 if first_crop == 1
     print "carrot"
@@ -25,7 +25,7 @@ else
 end
 
 # Else fallback
-val mystery_crop = 9
+let mystery_crop = 9
 
 if mystery_crop == 1
     print "carrot"
@@ -34,3 +34,4 @@ else if mystery_crop == 2
 else
     print "unknown crop"
 end
+

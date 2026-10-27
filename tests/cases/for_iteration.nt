@@ -1,5 +1,5 @@
-val names = ["newt", "ghostnote", "stray signal"]
-val name = "outer"
+let names = ["newt", "ghostnote", "stray signal"]
+let name = "outer"
 
 for name in names
     print name

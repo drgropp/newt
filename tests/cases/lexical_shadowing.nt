@@ -1,11 +1,11 @@
-val name = "global"
+let name = "global"
 
 fn show(name)
     print name
 end
 
 fn outer()
-    val name = "outer local"
+    let name = "outer local"
     show("parameter")
     print name
 end

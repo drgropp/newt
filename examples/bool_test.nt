@@ -1,7 +1,7 @@
 # Boolean values and conditions
 
-val awake = true
-val done = false
+let awake = true
+let done = false
 
 print awake
 print done
@@ -17,3 +17,4 @@ if done
 else
     print "not done"
 end
+

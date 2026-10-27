@@ -4,10 +4,10 @@ Newt is a small scripting language with line-oriented statements and blocks clos
 
 ## Variables
 
-Use `val` for a value that cannot be reassigned. Use `mut` when the value needs to change.
+Use `let` for a value that cannot be reassigned. Use `mut` when the value needs to change.
 
 ```newt
-val name = "Ada"
+let name = "Ada"
 mut score = 10
 score = score + 5
 ```
@@ -20,7 +20,7 @@ Variables declared in an `if`/`else` branch or a `while` body are local to that 
 
 ```newt
 print "Welcome"
-val age = input_number("Age: ")
+let age = input_number("Age: ")
 print age
 ```
 
@@ -70,7 +70,7 @@ for name in names
 end
 ```
 
-Indexes start at zero, so `names[0]` is the first element. Assigning to an existing index replaces that element, and `append(names, value)` adds one element at the end. Both operations require a `mut` binding; mutation through `val` is a runtime error. `length(names)` returns the number of elements. Nested indexing and indexed assignment such as `rows[1][0]` are also supported. Indexes must be whole numbers within the list's bounds, and only lists can be indexed or passed to `length`.
+Indexes start at zero, so `names[0]` is the first element. Assigning to an existing index replaces that element, and `append(names, value)` adds one element at the end. Both operations require a `mut` binding; mutation through `let` is a runtime error. `length(names)` returns the number of elements. Nested indexing and indexed assignment such as `rows[1][0]` are also supported. Indexes must be whole numbers within the list's bounds, and only lists can be indexed or passed to `length`.
 
 The expression after `in` is evaluated once and must produce a list. Its length is captured when the loop starts, so mutations made before the loop are visible while appending during the loop does not extend that loop. An empty list skips the body. The loop variable contains the current element and is immutable. It exists only for that iteration, may shadow an outer variable, and is unavailable after the loop.
 
@@ -85,8 +85,8 @@ List literals use square brackets and commas. Lists can be stored, indexed, chan
 Boolean values are `true` and `false`. Conditions can use `and`, `or`, and `not`.
 
 ```newt
-val hungry = true
-val sleeping = false
+let hungry = true
+let sleeping = false
 
 if hungry and not sleeping
     print "snack time"
@@ -108,7 +108,7 @@ Only those five escapes are valid. An unsupported escape or a backslash left at 
 Use `len` to count string bytes, `contains` for case-sensitive substring search, `upper` and `lower` for ASCII case conversion, and `trim` to remove surrounding ASCII whitespace.
 
 ```newt
-val command = trim("  Build Project  ")
+let command = trim("  Build Project  ")
 print upper(command)
 print len(command)
 print contains(lower(command), "build")
@@ -121,7 +121,7 @@ print contains(lower(command), "build")
 Newt supports `+`, `-`, `*`, `/`, comparisons, negative numbers, and grouped expressions. `+` also concatenates two strings.
 
 ```newt
-val total = (4 + 6) * 2
+let total = (4 + 6) * 2
 print -total
 print total >= 10
 print "total: " + text(total)
@@ -169,7 +169,7 @@ A comment begins with `#` and continues to the end of the line.
 
 ```newt
 # Calculate the area of a square.
-val side = 4
+let side = 4
 print side * side
 ```
 
@@ -178,7 +178,7 @@ print side * side
 Use `file_read` to read a complete text file. Use `file_write` to create or overwrite a file, and `file_append` to add text to its end.
 
 ```newt
-val note = file_read("notes.txt")
+let note = file_read("notes.txt")
 print note
 
 file_write("notes.txt", "first line")
@@ -204,3 +204,4 @@ print arg(1)
 ```
 
 This prints `2`, `hello`, and `newt`. An index outside the available arguments is a runtime error.
+

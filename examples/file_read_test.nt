@@ -1,4 +1,5 @@
 # File read test
 
-val text = file_read("examples/sample_note.txt")
+let text = file_read("examples/sample_note.txt")
 print text
+

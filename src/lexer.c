@@ -106,8 +106,8 @@ int token_text_equals(Token token, const char *text) {
 }
 
 static TokenType keyword_type(Token token) {
-    if (token_text_equals(token, "val")) {
-        return TOKEN_VAL;
+    if (token_text_equals(token, "let")) {
+        return TOKEN_LET;
     }
     if (token_text_equals(token, "mut")) {
         return TOKEN_MUT;
@@ -369,8 +369,8 @@ static const char *token_type_name(TokenType type) {
             return "NUMBER";
         case TOKEN_STRING:
             return "STRING";
-        case TOKEN_VAL:
-            return "VAL";
+        case TOKEN_LET:
+            return "LET";
         case TOKEN_MUT:
             return "MUT";
         case TOKEN_FN:
@@ -510,3 +510,4 @@ int print_tokens(const char *path, const char *source) {
         }
     }
 }
+

@@ -1,5 +1,5 @@
 mut counter = 0
-val label = "count"
+let label = "count"
 
 fn bump()
     counter = counter + 1

@@ -1281,8 +1281,8 @@ static Stmt *parse_for_statement(Parser *parser) {
 }
 
 static Stmt *parse_statement(Parser *parser) {
-    if (parser_match(parser, TOKEN_VAL)) {
-        return parse_declaration(parser, STMT_VAL_DECL, "val");
+    if (parser_match(parser, TOKEN_LET)) {
+        return parse_declaration(parser, STMT_LET_DECL, "let");
     }
 
     if (parser_match(parser, TOKEN_MUT)) {
@@ -1342,9 +1342,9 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
     int i;
 
     switch (stmt->kind) {
-        case STMT_VAL_DECL:
+        case STMT_LET_DECL:
             print_indent(indent);
-            printf("VAL_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
+            printf("LET_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
             print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_MUT_DECL:
@@ -1519,3 +1519,4 @@ int print_parse_tree(const char *path, const char *source) {
     parser_free(&parser);
     return 1;
 }
+

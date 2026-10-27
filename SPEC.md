@@ -47,15 +47,17 @@ Escape pairs remain in their original spelling in lexer tokens and parse-tree ou
 
 ## Variables
 
-`val` declares an immutable variable. `mut` declares a mutable variable.
+`let` declares an immutable variable. `mut` declares a mutable variable.
+
+The former declaration keyword `val` is no longer supported; update existing declarations to `let`. `val` is now an ordinary identifier.
 
 ```newt
-val name = "Ada"
+let name = "Ada"
 mut score = 10
 score = score + 5
 ```
 
-Reassigning a `val`, mutating a list through a `val` access path, assigning an undefined variable, or defining the same variable twice in one scope is a runtime error. Function parameters behave as immutable local variables, including when their values are lists. Function-local variables are discarded when the call returns.
+Reassigning a `let`, mutating a list through a `let` access path, assigning an undefined variable, or defining the same variable twice in one scope is a runtime error. Function parameters behave as immutable local variables, including when their values are lists. Function-local variables are discarded when the call returns.
 
 Names are resolved lexically. Code inside a function sees its own parameters and local variables, plus top-level variables: those declared at the outermost level of the program, outside any block, before the call. A function may assign a top-level `mut` variable. A function never sees the variables of the function that called it, and variables declared inside a top-level `if`, `while` or `for` block are not visible to functions. Each executed `if`, `else if`, or `else` branch creates a child scope. Each `while` iteration also creates a child scope. Variables declared in those blocks are discarded on exit, including exit through `break`, `continue`, or `return`; assignments to an outer `mut` still update the outer binding. Each `for` iteration keeps its existing child scope for its immutable loop variable and declarations in that iteration. A block-local variable may shadow an outer variable without replacing it.
 
@@ -134,7 +136,7 @@ end
 `for` evaluates its iterable expression once, requires the result to be a list, captures its starting length, and executes its body once for each of those elements from first to last. Mutations completed before the loop are visible. Appending during the loop does not extend the current loop. An empty list executes the body zero times. A non-list result is a runtime error.
 
 ```newt
-val names = ["newt", "ghostnote", "stray signal"]
+let names = ["newt", "ghostnote", "stray signal"]
 for name in names
     print name
 end
@@ -186,7 +188,7 @@ Function declarations take effect when execution reaches them, so a function mus
 - `exp(number)` returns e raised to the number.
 - `round(number)` rounds halfway values away from zero.
 
-The predefined immutable values `pi` and `e` are available as ordinary numeric identifiers. They may be shadowed in a child scope but cannot be assigned.
+The predefined immutable variableues `pi` and `e` are available as ordinary numeric identifiers. They may be shadowed in a child scope but cannot be assigned.
 
 Invalid numeric input, a non-number passed to a math helper, or a negative square-root argument is a runtime error. Inverse sine and cosine require values from -1 through 1, logarithms require positive values, and `atan2(0, 0)` is rejected as undefined. New scientific helpers and `pow` report domain errors and results outside the finite numeric range instead of returning a NaN or infinity.
 
@@ -211,7 +213,7 @@ String helpers require string arguments. `contains` is case-sensitive and an emp
 - `length(list)` returns the number of elements.
 - `append(list, value)` adds one value at the end and returns `true`.
 
-`append` requires its target to be a list binding, or an indexed list element, whose access path begins with a `mut` binding. Mutation through a `val` binding is a runtime error.
+`append` requires its target to be a list binding, or an indexed list element, whose access path begins with a `mut` binding. Mutation through a `let` binding is a runtime error.
 
 ### Command-line arguments
 
@@ -258,3 +260,4 @@ Newt is a small tree-walk interpreter intended for beginner-sized local scripts.
 - a stable package or embedding API.
 
 File I/O is intentionally basic and is not sandboxed. Source capacity limits are global to the parsed file, and diagnostics stop after the first lexer or parser error. Newt is experimental; this specification records the preview behavior so development can safely pause and resume later.
+

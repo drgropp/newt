@@ -1,2 +1,2 @@
-val name = "newt
-val x = 10 @ 3
+let name = "newt
+let x = 10 @ 3

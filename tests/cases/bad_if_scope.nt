@@ -1,5 +1,6 @@
 if true
-    val hidden = 12
+    let hidden = 12
     print hidden
 end
 print hidden
+

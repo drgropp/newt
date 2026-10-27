@@ -1,13 +1,14 @@
-val hungry = true
-val tired = false
+let hungry = true
+let tired = false
 
 if hungry or tired
     print "needs care"
 end
 
-val hp = 10
-val food = 0
+let hp = 10
+let food = 0
 
 if hp <= 0 or food <= 0
     print "danger"
 end
+

@@ -3,6 +3,7 @@ fn peek()
 end
 
 if true
-    val hidden = 1
+    let hidden = 1
     peek()
 end
+

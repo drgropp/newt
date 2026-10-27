@@ -1,2 +1,2 @@
-val items = ["sword"]
+let items = ["sword"]
 items[0] = "bow"

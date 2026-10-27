@@ -1,19 +1,20 @@
 # and combines boolean expressions.
 
-val a = true
-val b = true
+let a = true
+let b = true
 
 if a and b
     print "both"
 end
 
-val hp = 10
-val food = 5
+let hp = 10
+let food = 5
 
 if hp > 0 and food > 0
     print "alive"
 end
 
-val has_key = true
-val door_locked = false
+let has_key = true
+let door_locked = false
 print has_key and door_locked
+

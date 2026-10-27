@@ -1,6 +1,6 @@
 # Newt lexer test
 
-val name = "newt"
+let name = "newt"
 mut hp = 100
 
 if hp >= 50

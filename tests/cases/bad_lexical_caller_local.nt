@@ -3,8 +3,9 @@ fn peek()
 end
 
 fn caller()
-    val secret = "caller's local"
+    let secret = "caller's local"
     peek()
 end
 
 caller()
+

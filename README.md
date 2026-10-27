@@ -125,7 +125,7 @@ Newt currently supports:
 - mutable-list indexed assignment with `items[index] = value`
 - list growth with `append(list, value)`
 - list size with `length(list)`
-- immutable `val` variables
+- immutable `let` variables
 - mutable `mut` variables and assignment
 - `print`
 - numeric input with `input_number("prompt")`
@@ -160,8 +160,8 @@ See [docs/language.md](docs/language.md) for a short language guide.
 Values and arithmetic:
 
 ```newt
-val width = 8
-val height = 4
+let width = 8
+let height = 4
 print width * height
 
 mut score = 10
@@ -172,10 +172,10 @@ print score
 Strings, booleans, and comparisons:
 
 ```newt
-val player = "Ada"
-val hp = 10
-val food = 5
-val message = "Player: " + player
+let player = "Ada"
+let hp = 10
+let food = 5
+let message = "Player: " + player
 
 if hp > 0 and food > 0
     print message
@@ -197,21 +197,21 @@ Any other backslash sequence is a lexer error. A backslash at the end of an unte
 Boolean `or`, boolean `not`, and negative numbers:
 
 ```newt
-val tired = false
-val hungry = true
+let tired = false
+let hungry = true
 
 if hungry or not tired
     print "needs care"
 end
 
-val change = -(2 + 3)
+let change = -(2 + 3)
 print change
 ```
 
 Multiple conditional branches with `else if`:
 
 ```newt
-val crop = 2
+let crop = 2
 
 if crop == 1
     print "carrot"
@@ -258,14 +258,14 @@ for name in names
 end
 ```
 
-List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `val` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
+List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `let` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
 
 The iterable expression and its starting length are evaluated once before iteration starts. Mutations completed before the loop are visible; appending during a loop does not extend that loop. An empty list runs the body zero times. The loop variable is an immutable binding local to one iteration: it may shadow an outer variable, and it is discarded before the next iteration and after the loop. `break` and `continue` target the nearest enclosing `for` or `while`, including when the loop kinds are nested. A non-list iterable is a runtime error.
 
 Numeric input and square roots:
 
 ```newt
-val area = input_number("Area: ")
+let area = input_number("Area: ")
 print sqrt(area)
 ```
 
@@ -276,7 +276,7 @@ fn add(a, b)
     return a + b
 end
 
-val result = add(2, 3)
+let result = add(2, 3)
 print result
 ```
 
@@ -285,7 +285,7 @@ Functions can also have no parameters, and a call may be used as a standalone st
 Convert an existing value to text explicitly when building a string:
 
 ```newt
-val score = 42
+let score = 42
 print "Score: " + text(score)
 ```
 
@@ -294,7 +294,7 @@ Newt does not implicitly combine strings and numbers.
 Clean and inspect command-line text with the string helpers:
 
 ```newt
-val command = trim("  Build Project  ")
+let command = trim("  Build Project  ")
 print upper(command)
 print len(command)
 print contains(lower(command), "build")
@@ -303,7 +303,7 @@ print contains(lower(command), "build")
 Basic file I/O:
 
 ```newt
-val note = file_read("notes.txt")
+let note = file_read("notes.txt")
 print note
 
 file_write("notes.txt", "first line")
@@ -407,3 +407,4 @@ Newt is experimental, and still in an early stage. Newt is currently being worke
 No license has been chosen yet.
 
 Copyright 2026 drgropp. All rights reserved.
+

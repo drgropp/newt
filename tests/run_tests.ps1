@@ -16,6 +16,48 @@ function Normalize-Newlines([string]$Text) {
 
 $Tests = @(
     @{
+        Name = "let declaration and mutable assignment"
+        Arguments = "tests/cases/let_keyword.nt"
+        ExitCode = 0
+        Stdout = "10`n9`n"
+        Stderr = ""
+    },
+    @{
+        Name = "let token output"
+        Arguments = "--tokens tests/cases/let_keyword.nt"
+        ExitCode = 0
+        Stdout = "1:1 LET let`n1:5 IDENT score`n1:11 EQUAL =`n1:13 NUMBER 10`n1:15 NEWLINE`n2:1 PRINT print`n2:7 IDENT score`n2:12 NEWLINE`n3:1 MUT mut`n3:5 IDENT health`n3:12 EQUAL =`n3:14 NUMBER 10`n3:16 NEWLINE`n4:1 IDENT health`n4:8 EQUAL =`n4:10 NUMBER 9`n4:11 NEWLINE`n5:1 PRINT print`n5:7 IDENT health`n5:13 NEWLINE`n6:1 EOF`n"
+        Stderr = ""
+    },
+    @{
+        Name = "let parse tree"
+        Arguments = "--parse tests/cases/let_keyword.nt"
+        ExitCode = 0
+        Stdout = "PROGRAM`n  LET_DECL name=score`n    NUMBER 10`n  PRINT`n    IDENT score`n  MUT_DECL name=health`n    NUMBER 10`n  ASSIGN name=health`n    NUMBER 9`n  PRINT`n    IDENT health`nEOF`n"
+        Stderr = ""
+    },
+    @{
+        Name = "let assignment rejected"
+        Arguments = "tests/cases/bad_let_assignment.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_let_assignment.nt:2:1: runtime error: cannot assign to immutable variable 'score'`n"
+    },
+    @{
+        Name = "old val declaration rejected"
+        Arguments = "tests/cases/bad_old_val_declaration.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_old_val_declaration.nt:1:5: parse error: expected '=' after assignment name`n"
+    },
+    @{
+        Name = "keyword boundaries and val identifier"
+        Arguments = "tests/cases/let_identifiers.nt"
+        ExitCode = 0
+        Stdout = "6`n"
+        Stderr = ""
+    },
+    @{
         Name = "existing hello example"
         Arguments = "examples/hello.nt"
         ExitCode = 0
@@ -174,7 +216,7 @@ $Tests = @(
         Arguments = "tests/cases/bad_pi_assignment.nt"
         ExitCode = 1
         Stdout = ""
-        Stderr = "tests/cases/bad_pi_assignment.nt:1:1: runtime error: cannot assign to immutable val 'pi'`n"
+        Stderr = "tests/cases/bad_pi_assignment.nt:1:1: runtime error: cannot assign to immutable variable 'pi'`n"
     },
     @{
         Name = "while parse tree"
@@ -331,18 +373,18 @@ $Tests = @(
         Stderr = ""
     },
     @{
-        Name = "indexed assignment rejects immutable val"
+        Name = "indexed assignment rejects immutable variable"
         Arguments = "tests/cases/bad_list_index_assignment_immutable.nt"
         ExitCode = 1
         Stdout = ""
-        Stderr = "tests/cases/bad_list_index_assignment_immutable.nt:2:1: runtime error: cannot mutate immutable val 'items'`n"
+        Stderr = "tests/cases/bad_list_index_assignment_immutable.nt:2:1: runtime error: cannot mutate immutable variable 'items'`n"
     },
     @{
-        Name = "append rejects immutable val"
+        Name = "append rejects immutable variable"
         Arguments = "tests/cases/bad_list_append_immutable.nt"
         ExitCode = 1
         Stdout = ""
-        Stderr = "tests/cases/bad_list_append_immutable.nt:2:8: runtime error: cannot mutate immutable val 'items'`n"
+        Stderr = "tests/cases/bad_list_append_immutable.nt:2:8: runtime error: cannot mutate immutable variable 'items'`n"
     },
     @{
         Name = "indexed assignment validates integer index"
@@ -440,7 +482,7 @@ $Tests = @(
         Arguments = "--parse tests/cases/bad_parse.nt"
         ExitCode = 1
         Stdout = ""
-        Stderr = "tests/cases/bad_parse.nt:1:5: parse error: expected identifier after val`n"
+        Stderr = "tests/cases/bad_parse.nt:1:5: parse error: expected identifier after let`n"
     },
     @{
         Name = "runtime type failure"

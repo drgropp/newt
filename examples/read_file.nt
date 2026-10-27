@@ -1,4 +1,5 @@
 # Read a complete text file
 
-val text = file_read("examples/sample.txt")
+let text = file_read("examples/sample.txt")
 print text
+

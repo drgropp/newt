@@ -1,2 +1,3 @@
-val items = ["sword"]
+let items = ["sword"]
 append(items, "bow")
+
