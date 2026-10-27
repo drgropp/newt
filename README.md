@@ -1,23 +1,10 @@
 # Newt
 
-Newt 0.001 is an experimental systems-language project implemented in C. It is a long-term learning project for OS development, CLI/TUI tools, and mathematics, mainly inspired by C, assembly, and Rust, with selected ideas from Zig and Go.
+Newt 0.001 is an experimental systems-language project implemented in C. The current implementation is a tree-walking interpreter for `.nt` programs, with C-style typed declarations and functions, lexical scope, and runtime type checks.
 
-The current implementation is a tree-walking interpreter. It supports C-style typed declarations and functions, `let`, `mut`, `const`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. It executes top-level statements; no special entry function is implemented yet.
+Newt supports `let`, `mut`, `const`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. Programs execute top-level statements in order; functions run when called explicitly. Untyped `let`/`mut` declarations and `fn` functions are also supported.
 
-## Direction and current milestone
-
-The goal is predictable native code, explicit memory control, and interoperability with C, Rust, and assembly. Current strings and lists are reference counted. Typed numbers have distinct host C `int`, `float`, and `double` payloads; compatibility-mode numbers remain double-based. Runtime values are still tagged interpreter objects, not packed native data layouts.
-
-Changes are intentionally small and independently testable:
-
-1. **Implemented:** brace blocks replace `end`, retaining lexical scope and current execution behavior.
-2. **Implemented:** C-style typed declarations and function signatures, including `let`, `mut`, and `const`.
-3. **Implemented in the interpreter:** distinct 32-bit `int`, binary32 `float`, and binary64 `double` behavior, with checked arithmetic and explicit conversions.
-4. **Planned:** `start:` and defined entry-function and return behavior.
-5. **Planned:** a minimal compiler that emits assembly for one initial target.
-6. **Planned:** pointers, fixed-layout data, external calls, and target-specific assembly in `{{ }}` blocks with explicit inputs, outputs, and clobbers.
-
-`start:`, pointers, and assembly blocks are **not supported yet**. Type enforcement currently happens during interpretation, not in a whole-program static checker. Existing untyped `let`/`mut` declarations and `fn` functions remain supported during the transition. Direct execution from an OS terminal is a long-term goal, not a current feature. Advanced collections, modules, networking, and other optional features remain outside this milestone.
+Strings and lists are reference counted. Typed numbers use distinct host C `int`, `float`, and `double` payloads; untyped numbers use double-based arithmetic. Runtime values are tagged interpreter objects.
 
 A complete program using the syntax implemented today:
 
@@ -39,27 +26,27 @@ void main(void) {
     print precision;
 }
 
-;# Entry-point selection is not implemented yet.
+;# Call main explicitly.
 main();
 ```
 
 ## Typed declarations and functions
 
 - `int fuel = 25;` and `mut int fuel = 25;` create mutable integer bindings.
-- `let int fuel = 25;` and `const int fuel = 25;` create read-only bindings. Pointer-level `const` qualification is a future feature; no pointer types exist yet.
+- `let int fuel = 25;` and `const int fuel = 25;` create read-only bindings.
 - Type names and `const` are reserved keywords; rename any old functions or variables using those names.
 - Available declaration types are `int`, `float`, `double`, `bool`, `string`, and `list`. `void` is only a function return type or a sole no-parameter marker.
 - Types precede names. Typed parameters are mutable local copies unless marked `const` or `let`. Lists remain shared reference-counted values, not deep copies.
-- Variables require initializers. Multiple declarations in one statement and function prototypes are not implemented. `f()` and `f(void)` both mean no parameters in Newt.
-- The current build requires the host C model with signed 32-bit `int`, binary32 `float`, and binary64 `double`; compile-time assertions reject other models. This is an interpreter target restriction, not a promise of a portable C ABI yet.
+- Variables require initializers. `f()` and `f(void)` both mean no parameters in Newt.
+- The current build requires the host C model with signed 32-bit `int`, binary32 `float`, and binary64 `double`; compile-time assertions reject other models.
 - An expected numeric type gives number literals their type: `float n = 21.5;` and `int half = 5 / 2;` work. Typed integer division truncates toward zero; overflow and division by zero are errors. Typed float operations round to binary32. Literal-only expressions next to a typed operand adopt its type.
 - Already-typed values do not silently change numeric types. Use `int(value)`, `float(value)`, or `double(value)`. Conversion to `int` truncates toward zero and checks range; non-finite values and out-of-range float/int conversions are rejected. Finite floating-point underflow may round to zero.
 - Arguments, assignments, and returned values must match declared types. A typed non-void function must return a matching value on the executed path. A `void` function accepts `return;` or falls through, and cannot be used as a value.
-- Existing numeric built-ins accept numeric inputs and still return compatibility-mode numbers; convert their numeric results explicitly when storing them in typed bindings, for example `double root = double(sqrt(9));`. Existing dynamic code remains valid, but is not statically checked.
+- Existing numeric built-ins accept numeric inputs and still return compatibility-mode numbers; convert their numeric results explicitly when storing them in typed bindings, for example `double root = double(sqrt(9));`. Untyped code is checked during execution.
 
 See `examples/typed_systems.nt` for a runnable example. Use `--tokens` and `--parse` to inspect type keywords, declaration types, return types, and parameter mutability.
 
-Simple statements need `;`, including the final statement in a file. A closing `}` needs no semicolon. Opening braces may be on the header line or the following line. `;#` begins a line comment; braces and comment markers inside strings remain text. Existing `end`-based programs must be migrated. Double braces are reserved for future assembly design and are not executable assembly today.
+Simple statements need `;`, including the final statement in a file. A closing `}` needs no semicolon. Opening braces may be on the header line or the following line. `;#` begins a line comment; braces and comment markers inside strings remain text.
 
 ## Build
 
@@ -182,7 +169,9 @@ Newt currently supports:
 - mutable-list indexed assignment with `items[index] = value`
 - list growth with `append(list, value)`
 - list size with `length(list)`
-- immutable `let` variables
+- C-style typed declarations and function signatures
+- distinct `int`, `float`, and `double` numeric behavior and explicit conversions
+- immutable `let` and `const` variables
 - mutable `mut` variables and assignment
 - `print`
 - numeric input with `input_number("prompt")`
@@ -315,7 +304,7 @@ for name in names {
 }
 ```
 
-List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `let` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
+List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a mutable binding, such as `mut names` or `list names`; attempting them through a `let` or `const` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
 
 The iterable expression and its starting length are evaluated once before iteration starts. Mutations completed before the loop are visible; appending during a loop does not extend that loop. An empty list runs the body zero times. The loop variable is an immutable binding local to one iteration: it may shadow an outer variable, and it is discarded before the next iteration and after the loop. `break` and `continue` target the nearest enclosing `for` or `while`, including when the loop kinds are nested. A non-list iterable is a runtime error.
 
@@ -337,7 +326,7 @@ let result = add(2, 3);
 print result;
 ```
 
-Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters. Because Newt does not have a `none` value yet, a value-producing call to a function without an explicit `return` safely produces the number `0`.
+Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function supports up to 16 parameters. Untyped `fn` functions produce the number `0` when they finish without an explicit `return`. Typed non-void functions must return a matching value on the executed path; `void` functions do not produce a value.
 
 Convert an existing value to text explicitly when building a string:
 
@@ -392,10 +381,9 @@ file_write("examples/devlog.md", "# Devlog\n\n");
 file_append("examples/devlog.md", "Today I worked on Newt.\n");
 ```
 
-Additional list operations, imports/modules, HTTP, and JSON are not part of Newt yet.
-
 ## Main examples
 
+- `typed_systems.nt` demonstrates typed declarations, C-style functions, qualifiers, and explicit numeric conversion.
 - `args.nt` demonstrates direct command-line arguments.
 - `read_file.nt` demonstrates reading a complete text file.
 - `write_file.nt` demonstrates overwriting a text file.
@@ -457,7 +445,7 @@ newt/
 
 ## Status
 
-Newt is experimental, and still in an early stage. Newt is currently being worked on and will continue to have updates.
+Newt is experimental. Type checks happen during interpretation, and diagnostics include source locations when available.
 
 ## License
 
