@@ -16,6 +16,7 @@ int order_index(int *p) { *p = 1; return 0; }
 int *order_pointer(int *p) { if (*p == 1) *p = 2; else *p = 99; return p; }
 '''
 CASES = [
+ ('assembly_bool_output', 'start: void main(void) { bool ready=false; {{ mov eax, 2 }} -> ready; print ready; }', 'true\n'),
  ('wide_pointer_condition', 'start: void main(void) { void* p=0; {{ movabs rax, 0x100000000 }} -> p; if p { print 1; } else { print 0; } while p { print 2; p=0; } }', '1\n2\n'),
  ('const_mixed_equality', 'start: void main(void) { int n=2; int* p=&n; const int* q=p; print p==q; }', 'true\n'),
  ('const_return', 'const int* same(const int* p) { return p; } extern const int* readonly_identity(const int* p); start: void main(void) { const int n=5; const int* p=same(&n); const int* q=readonly_identity(p); print *q; print q==p; }', '5\ntrue\n'),
@@ -40,6 +41,8 @@ CASES = [
  ('asm_pointer_output', 'start: void main(void) { int n=8; int* p=0; asm(rdi=&n) {{ mov rax, rdi }} -> p; print *p; }', '8\n'),
 ]
 REJECT = [
+ ('oversized_pointer_literal', 'start: void main(void) { int* p=999999999999999999999999999; }'),
+ ('fractional_pointer_literal', 'start: void main(void) { int* p=1.5; }'),
  ('const_write', 'start: void main(void) { int n=1; const int* p=&n; *p=2; }'),
  ('const_drop', 'start: void main(void) { const int n=1; int* p=&n; }'),
  ('const_struct', 'struct Pair { int n; }; start: void main(void) { const struct Pair p={1}; p.n=2; }'),
@@ -95,12 +98,19 @@ def main():
   sentinel=d/'existing.s';sentinel.write_text('preserve this output\n')
   bad=d/'bad_const.nt';bad.write_text('start: void main(void) { const int n=1; n=2; }')
   result=run([newt,'--emit-asm',bad,'-o',sentinel]);assert result.returncode==1 and sentinel.read_text()=='preserve this output\n'
+  # Source aliases must not be overwritten by assembly output.
+  protected=d/'protected.nt';protected.write_text('start: void main(void) {}\n')
+  aliases=[d/'.'/'protected.nt', d/'protected-link.nt']
+  aliases[1].symlink_to(protected)
+  for alias in aliases:
+   result=run([newt,'--emit-asm',protected,'-o',alias])
+   assert result.returncode==1 and 'overwrite' in result.stderr and protected.read_text()=='start: void main(void) {}\n'
   # Raw assembly must remain one token, with following source locations intact.
   tokens=d/'tokens.nt';tokens.write_text('start:\nvoid main(void) {\n{{\nnop\n}}\nprint 1;\n}\n')
   result=run([newt,'--tokens',tokens]);assert result.returncode==0 and '3:1 ASM_BLOCK {{' in result.stdout and '6:1 PRINT print' in result.stdout
   parsed=run([newt,'--parse',d/'const_pointer.nt']);assert parsed.returncode==0 and 'TYPE const int*' in parsed.stdout
   # The interpreter must reject native pointer operations instead of treating them as arithmetic.
   nt=d/'pointer.nt';result=run([newt,nt]);assert result.returncode==1 and '--emit-asm' in result.stderr
- print(f'{len(CASES)} native systems executions and {len(REJECT)+5} safety/rejection checks passed.')
+ print(f'{len(CASES)} native systems executions and {len(REJECT)+7} safety/rejection checks passed.')
 
 if __name__=='__main__': main()

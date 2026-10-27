@@ -806,6 +806,7 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
         case EXPR_LIST: {
             ListValue *list;
             int i;
+            const int count = expr->element_count;
 
             list = malloc(sizeof(ListValue));
             if (list == NULL) {
@@ -813,23 +814,23 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                 return 0;
             }
             list->elements = NULL;
-            list->count = expr->element_count;
-            list->capacity = expr->element_count;
-            if (list->capacity > 0) {
-                list->elements = malloc((size_t)list->capacity * sizeof(Value));
+            list->count = count;
+            list->capacity = count;
+            if (count > 0) {
+                list->elements = malloc((size_t)count * sizeof(Value));
                 if (list->elements == NULL) {
                     free(list);
                     runtime_error(interpreter, expr->token, "not enough memory for list");
                     return 0;
                 }
-            }
-            for (i = 0; i < list->count; i++) {
-                Expr *element = interpreter->parser->list_elements[expr->element_start + i];
+                for (i = 0; i < count; i++) {
+                    Expr *element = interpreter->parser->list_elements[expr->element_start + i];
 
-                if (!eval_expression(interpreter, element, &list->elements[i])) {
-                    free(list->elements);
-                    free(list);
-                    return 0;
+                    if (!eval_expression(interpreter, element, &list->elements[i])) {
+                        free(list->elements);
+                        free(list);
+                        return 0;
+                    }
                 }
             }
             link_list(interpreter, list);

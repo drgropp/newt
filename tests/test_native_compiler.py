@@ -14,7 +14,8 @@ CASES = [
     ('loops', 'start: void main(void) { int n = 0; while n < 8 { n = n + 1; if n == 2 { continue; } if n == 6 { break; } print n; } }'),
     ('shadow', 'start: void main(void) { int n = 4; if true { const int n = 8; print n; } else { print 0; } print n; }'),
     ('logic', 'start: void main(void) { bool a = false && bad(); bool b = true || bad(); print a; print b; } bool bad(void) { print "not reached"; return true; }'),
-    ('strings', 'start: void main(void) { print "line\\n"; print "a\\tb"; print "quote: \\""; }'.replace('\\""','\\""')),
+    ('strings', 'start: void main(void) { print "line\\n"; print "a\\tb"; print "quote: \\""; }'),
+    ('negative_cast', 'start: void main(void) { print int(-5); }'),
     ('limits', 'start: void main(void) { int low = -2147483648; int high = 2147483647; print low; print high; }'),
     ('six_args', 'int sum(int a,int b,int c,int d,int e,int f) { return a+b+c+d+e+f; } start: void main(void) { print sum(1,2,3,4,5,6); }'),
     ('overflow', 'start: void main(void) { int n = 2147483647; print n + 1; }'),
@@ -31,6 +32,8 @@ REJECT = [
     ('bool_arithmetic', 'start: void main(void) { bool b=true; print b+b; }'),
     ('void_condition', 'void f(void) {} start: void main(void) { if f() {} }'),
     ('no_entry', 'print 1;'),
+    ('dynamic_comparison_division', 'start: void main(void) { print 5 / 2 == 2; }'),
+    ('dynamic_comparison_overflow', 'start: void main(void) { print 2147483647 + 1 > 0; }'),
     ('dynamic_arithmetic', 'start: void main(void) { print 5 / 2; }'),
 ]
 
@@ -67,10 +70,15 @@ def main():
             path.write_text(source+'\n')
             result = run([newt,'--emit-asm',path,'-o',assembly])
             assert result.returncode == 1 and 'compile error:' in result.stderr and not assembly.exists(), (name,result)
+        protected=directory/'source.nt';protected.write_text('start: void main(void) {}\n')
+        alias=directory/'source-alias.nt';alias.symlink_to(protected)
+        for output in [str(directory)+'/./source.nt',str(alias)]:
+            result=run([newt,'--emit-asm',protected,'-o',output])
+            assert result.returncode==1 and 'overwrite' in result.stderr and protected.read_text()=='start: void main(void) {}\n'
         path = directory/'hello.nt'
         result = run([newt,'--emit-asm',path,'-o',directory/'arm.s','--target','aarch64-linux'])
         assert result.returncode == 1 and 'unsupported target' in result.stderr
-    print(f'{len(CASES)} native/interpreter comparisons and {len(REJECT)+1} compiler rejection checks passed.')
+    print(f'{len(CASES)} native/interpreter comparisons and {len(REJECT)+3} compiler rejection checks passed.')
 
 if __name__ == '__main__':
     main()

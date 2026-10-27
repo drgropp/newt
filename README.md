@@ -76,7 +76,7 @@ gcc -no-pie /tmp/native_integer.s -o /tmp/native_integer
 
 The compiler emits GNU assembly in Intel syntax for **x86-64 Linux / System V**. GCC's assembler and linker produce the executable; linking uses the host C library for printing and error reporting. Cross-architecture and bare-metal output are not supported. The compiler can emit this text on other hosts, but execution requires the selected target and toolchain.
 
-The supported subset includes `start:`, typed `int`/`bool`/`void` functions, up to six scalar/pointer parameters, local bindings, assignment, checked integer arithmetic, comparisons, logical operators, `if`, `while`, `break`, `continue`, returns, and printing integers, booleans, or string literals. Native-only systems features include pointers, structs, external calls, and assembly blocks, described below. Globals must be moved into functions. Floats, doubles, lists, dynamic declarations, and other interpreter-only constructs produce compilation errors. Arithmetic needs an explicit integer context or typed operand: use `int half = 5 / 2;` rather than an untyped arithmetic expression. Native loops and calls use the host stack and do not impose the interpreter's iteration/call-depth limits.
+The supported subset includes `start:`, typed `int`/`bool`/`void` functions, up to six scalar/pointer parameters, local bindings, assignment, checked integer arithmetic, comparisons, logical operators, `if`, `while`, `break`, `continue`, returns, and printing integers, booleans, or string literals. Native-only systems features include pointers, structs, external calls, and assembly blocks, described below. Globals must be moved into functions. Floats, doubles, lists, dynamic declarations, and other interpreter-only constructs produce compilation errors. Arithmetic needs an explicit integer context or typed operand: use `int half = 5 / 2;` rather than an untyped arithmetic expression. Comparisons containing arithmetic also require typed operands; untyped comparisons such as `5 / 2 == 2` are rejected rather than changing double-based interpreter semantics. Native loops and calls use the host stack and do not impose the interpreter's iteration/call-depth limits.
 
 All compilation checks complete before an output file is opened. Runtime overflow, division by zero, and missing returns print native diagnostics and exit with status 1. `--emit-asm` never invokes the interpreter as a fallback.
 
@@ -261,6 +261,8 @@ Run the focused stdout, stderr, and exit-code regression suite on Windows with:
 ```bat
 regression_tests.bat
 ```
+
+On x86-64 Linux with Python 3 and GCC, run the complete interpreter/native/reference/stress suite with `make test-all`. Run `python3 tests/run_regressions.py` for the shared interpreter cases without PowerShell.
 
 See [TESTING.md](TESTING.md) for Windows and Unix-like testing instructions.
 
