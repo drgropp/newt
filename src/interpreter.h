@@ -139,10 +139,12 @@ Variable *find_variable(Interpreter *interpreter, Token name);
 
 int eval_expression(Interpreter *interpreter, Expr *expr, Value *value);
 
+/* Returns interpreter success separately from the entry function's host exit status. */
 int run_program(const char *path,
                        const char *source,
                        int script_argument_count,
-                       char **script_arguments);
+                       char **script_arguments,
+                       int *program_exit_status);
 
 #endif
 

@@ -1,0 +1,5 @@
+int before = 2;
+start:
+int main(void) { print before + after; print helper(); return 0; }
+int after = 3;
+int helper(void) { return 9; }

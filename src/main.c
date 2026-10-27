@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
     int parse_mode = 0;
     int run_mode = 0;
     int success = 1;
+    int program_exit_status = 0;
     int script_argument_count = 0;
     char **script_arguments = NULL;
     const char *path = NULL;
@@ -145,11 +146,12 @@ int main(int argc, char **argv) {
         success = run_program(path,
                               source,
                               script_argument_count,
-                              script_arguments);
+                              script_arguments,
+                              &program_exit_status);
     }
 
     free(source);
 
-    return success ? 0 : 1;
+    return success ? program_exit_status : 1;
 }
 

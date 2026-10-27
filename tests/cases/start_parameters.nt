@@ -1,0 +1,1 @@
+start: int main(int count) { return count; }

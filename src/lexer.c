@@ -106,6 +106,7 @@ int token_text_equals(Token token, const char *text) {
 }
 
 static TokenType keyword_type(Token token) {
+    if (token_text_equals(token, "start")) return TOKEN_START;
     if (token_text_equals(token, "int")) return TOKEN_INT;
     if (token_text_equals(token, "float")) return TOKEN_FLOAT;
     if (token_text_equals(token, "double")) return TOKEN_DOUBLE;
@@ -356,6 +357,8 @@ Token next_token(Lexer *lexer) {
             return make_token(lexer, TOKEN_LEFT_BRACKET);
         case ']':
             return make_token(lexer, TOKEN_RIGHT_BRACKET);
+        case ':':
+            return make_token(lexer, TOKEN_COLON);
         case ',':
             return make_token(lexer, TOKEN_COMMA);
         case '.':
@@ -392,6 +395,8 @@ static const char *token_type_name(TokenType type) {
         case TOKEN_BOOL: return "BOOL";
         case TOKEN_STRING_TYPE: return "STRING_TYPE";
         case TOKEN_LIST_TYPE: return "LIST_TYPE";
+        case TOKEN_START: return "START";
+        case TOKEN_COLON: return "COLON";
         case TOKEN_CONST: return "CONST";
         case TOKEN_LET:
             return "LET";

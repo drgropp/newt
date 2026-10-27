@@ -1,0 +1,5 @@
+;# program
+start: ;# entry
+
+void main(void)
+{ print "ready"; }

@@ -1,0 +1,1 @@
+start: int main(void) { string note = "hello" + " world"; mut list items = [note]; print length(items); return 13; }

@@ -24,6 +24,24 @@ Successful commands exit with status 0. File-loading, lexer, parser, runtime, an
 
 The semicolon in `;#` also terminates any preceding statement: `let fuel = 25;# starting fuel` is valid. Standalone comment lines and empty `;` statements are allowed. A plain `#` outside a string is an error. Semicolons inside strings are text. Multiple statements may share a line; expressions remain line-oriented for now.
 
+## Entry functions and process status
+
+A top-level `start:` marker must be followed by a typed definition named `main`, returning `void` or `int`, with no parameters (`()` or `(void)`). The colon must follow `start` before a newline. Newlines and comments may separate the marker from its function. `start` is reserved. Duplicate or nested markers and incompatible signatures are parse errors.
+
+```newt
+start:
+int main(void) {
+    print "hello world";
+    return 0;
+}
+```
+
+When an entry marker exists, every top-level statement must be a variable or function declaration. This restriction is validated before execution; a top-level manual `main();` call is rejected. Newt executes those declarations in source order, then invokes the marked function once automatically. Later globals and functions are therefore available to that automatic invocation. Initializer expressions retain normal source-order lookup and may call functions already defined.
+
+`void main` may return without an expression or fall through, producing host exit status zero. `int main` must return a matching integer on its executed path, which becomes the host C program's return status. Values outside 0–255 have host-dependent shell representations, as with C. Errors produce status 1 and standard-error diagnostics. Errors during initialization prevent automatic entry. Runtime objects are cleaned up before the interpreter returns to its host, including on a nonzero successful exit.
+
+Files without an entry marker retain top-level execution and status zero on success. Ordinary calls in those files discard an unused integer return value instead of converting it to a process status. Development modes parse or tokenize only and return zero on success, independently of what an entry function would return.
+
 ## C-style typed declarations and functions
 
 Supported forms include `int n = 25;`, `mut int n = 25;`, `let int n = 25;`, and `const int n = 25;`. Plain declarations and `mut` permit reassignment; `let` and `const` forbid it. Conflicting qualifier combinations are rejected. An initializer is required. The numeric types are `int`, `float`, and `double`; `bool`, `string`, and `list` also name existing value categories. No pointer-level const qualification or native layout is implemented.
@@ -51,7 +69,7 @@ The interpreter requires signed 32-bit host C `int`, binary32 `float`, and binar
 
 An expected numeric type determines literal and literal-expression arithmetic. Literal-only operands alongside typed operands adopt the typed operand's type. Integer division truncates toward zero, checked integer arithmetic rejects overflow, and typed float arithmetic rounds to binary32. Typed floating arithmetic rejects non-finite results; finite underflow follows host rounding, potentially producing zero. Distinct numeric types require explicit conversion, including comparisons. Use `int(expr)`, `float(expr)`, and `double(expr)` with exactly one numeric argument. Explicit integer conversion truncates toward zero and checks range. Implicit contextual integer initialization rejects fractional literals. Float conversion checks range; double conversion preserves the numeric value. Numeric built-ins still return compatibility-mode double-based numbers and require explicit conversion when entering typed bindings.
 
-Existing untyped `let`, `mut`, and `fn` forms remain supported during migration. The new type names and `const` are reserved keywords; existing identifiers with those names must be renamed (the old `double` example helper is now `twice`). `start:`, automatic entry calls, static checking, pointers, and assembly are not implemented.
+Existing untyped `let`, `mut`, and `fn` forms remain supported during migration. The new type names and `const` are reserved keywords; existing identifiers with those names must be renamed (the old `double` example helper is now `twice`). Whole-program static checking, pointers, and assembly are not implemented.
 
 ## Values
 

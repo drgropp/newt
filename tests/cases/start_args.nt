@@ -1,0 +1,1 @@
+start: void main(void) { print arg_count(); print arg(0); }

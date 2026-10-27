@@ -1,0 +1,2 @@
+start:
+int main(void) { print "ok"; return 0; }

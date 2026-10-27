@@ -13,6 +13,7 @@ void parser_init(Parser *parser, const char *path, const char *source) {
     lexer_init(&parser->lexer, source);
     parser->path = path;
     parser->had_error = 0;
+    parser->entry_statement = -1;
     parser->expr_blocks = NULL;
     parser->expr_block_used = 0;
     parser->expression_count = 0;
@@ -231,6 +232,7 @@ static Stmt *new_stmt(Parser *parser, StmtKind kind, Token name, Expr *expressio
     stmt->parameter_start = 0;
     stmt->parameter_count = 0;
     stmt->declared_type = TYPE_AUTO;
+    stmt->is_entry = 0;
     return stmt;
 }
 
@@ -1309,6 +1311,10 @@ static Stmt *parse_for_statement(Parser *parser) {
 }
 
 static Stmt *parse_statement(Parser *parser) {
+    if (parser->current.type == TOKEN_START) {
+        parser_error(parser, parser->current, "start: is only allowed at top level");
+        return NULL;
+    }
     DeclType type = token_decl_type(parser->current.type);
     if (type != TYPE_AUTO) {
         Token name;
@@ -1404,6 +1410,10 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
             print_expression_tree(parser, stmt->expression, indent + 2);
             break;
         case STMT_FN_DECL:
+            if (stmt->is_entry) {
+                print_indent(indent);
+                printf("ENTRY start:\n");
+            }
             print_indent(indent);
             printf("FN_DECL name=%.*s\n", stmt->name.length, stmt->name.start);
             if (stmt->declared_type != TYPE_AUTO) {
@@ -1516,6 +1526,44 @@ static void print_statement_tree(Parser *parser, Stmt *stmt, int indent) {
     }
 }
 
+/* start: is an entry directive, not a function call or an arbitrary jump. */
+static Stmt *parse_entry_declaration(Parser *parser) {
+    Token start_token = parser->current;
+    DeclType type;
+    Token name;
+    Stmt *stmt;
+    if (parser->entry_statement >= 0) {
+        parser_error(parser, start_token, "only one start: entry is allowed");
+        return NULL;
+    }
+    parser_advance(parser);
+    parser_consume(parser, TOKEN_COLON, "expected ':' after start");
+    if (parser->had_error) return NULL;
+    parser_skip_newlines(parser);
+    type = token_decl_type(parser->current.type);
+    if (type != TYPE_INT && type != TYPE_VOID) {
+        parser_error(parser, parser->current, "start: requires int main(void) or void main(void)");
+        return NULL;
+    }
+    parser_advance(parser);
+    parser_consume(parser, TOKEN_IDENT, "expected main after entry return type");
+    if (parser->had_error) return NULL;
+    name = parser->previous;
+    if (!token_text_equals(name, "main")) {
+        parser_error(parser, name, "start: entry function must be named main");
+        return NULL;
+    }
+    stmt = parse_function_declaration(parser, type, name, 1);
+    if (stmt == NULL || parser->had_error) return NULL;
+    if (stmt->parameter_count != 0) {
+        parser_error(parser, name, "start: main must have no parameters; use arg_count() and arg()");
+        return NULL;
+    }
+    stmt->is_entry = 1;
+    parser->entry_statement = stmt->index;
+    return stmt;
+}
+
 int parse_program(Parser *parser) {
     parser_advance(parser);
 
@@ -1526,13 +1574,25 @@ int parse_program(Parser *parser) {
     parser_skip_separators(parser);
 
     while (!parser->had_error && parser->current.type != TOKEN_EOF) {
-        Stmt *stmt = parse_statement(parser);
+        Stmt *stmt = parser->current.type == TOKEN_START
+                   ? parse_entry_declaration(parser) : parse_statement(parser);
         add_top_level_statement(parser, stmt);
         parser_skip_separators(parser);
     }
 
     if (parser->had_error) {
         return 0;
+    }
+
+    if (parser->entry_statement >= 0) {
+        int i;
+        for (i = 0; i < parser->top_level_statement_count; i++) {
+            Stmt *stmt = &parser->statements[parser->top_level_statements[i]];
+            if (stmt->kind != STMT_FN_DECL && stmt->kind != STMT_LET_DECL && stmt->kind != STMT_MUT_DECL) {
+                parser_error(parser, stmt->name, "programs with start: allow only declarations at top level; put executable statements inside main");
+                return 0;
+            }
+        }
     }
 
     /* Parsing is finished, so the block pool will not move again: aim each

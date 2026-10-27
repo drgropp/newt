@@ -1,0 +1,2 @@
+print "must not execute";
+start: void main(void) {}

@@ -79,6 +79,10 @@ git diff --check
 
 The focused suite currently checks:
 
+- automatic `start:` entry, void/int exits, arguments, initialization order, cleanup, and compatibility without a marker;
+- invalid, duplicate, or nested entry markers and top-level executable statements in entry programs;
+- token/parse inspection without entry execution or exit-status propagation;
+
 - C-style type keywords and parse metadata, qualified declarations, parameter mutability, recursion, and parameter-pool growth;
 - distinct integer/float/double arithmetic, float rounding, explicit casts, numeric limits, overflow, and division by zero;
 - argument, assignment, and return type mismatches, void behavior, and missing returns on executed paths;
