@@ -3,6 +3,7 @@
 #include "compiler.h"
 #include "parser.h"
 #include <stdarg.h>
+#include <sys/stat.h>
 
 typedef struct { DeclType base; int pointers; Token record; } CType;
 typedef struct { Token name; CType type; int offset, readonly, depth; } Local;
@@ -70,6 +71,13 @@ static int integer_token(Codegen *g, Token t, int negative, int *result) {
     if (n < INT_MIN || n > INT_MAX) { error(g, t, "integer literal is out of int range"); return 0; }
     *result = (int)n; return 1;
 }
+/* Preserve interpreter semantics: untyped arithmetic is double-based. */
+static int plain_integer_literal(Expr *e) {
+    return e && (e->kind == EXPR_NUMBER ||
+        (e->kind == EXPR_UNARY && e->token.type == TOKEN_MINUS &&
+         e->left && e->left->kind == EXPR_NUMBER));
+}
+
 static CType infer(Codegen *g, Expr *e) {
     if (!e) return scalar(TYPE_VOID);
     switch (e->kind) {
@@ -103,7 +111,7 @@ static CType call(Codegen *g, Expr *e) {
         Expr *a;
         if (e->argument_count != 1) { error(g, e->token, "int conversion requires one argument"); return scalar(TYPE_INT); }
         a = g->parser->call_arguments[e->argument_start];
-        if (a->kind != EXPR_NUMBER && infer(g, a).base != TYPE_INT) {
+        if (!plain_integer_literal(a) && infer(g, a).base != TYPE_INT) {
             error(g, a->token, "native int conversion currently accepts integer literals or typed ints"); return scalar(TYPE_INT);
         }
         expression(g, a, scalar(TYPE_INT)); return scalar(TYPE_INT);
@@ -156,6 +164,9 @@ static CType expression(Codegen *g, Expr *e, CType expected) {
             if (context.base == TYPE_AUTO) {
                 if (e->token.type == TOKEN_PLUS || e->token.type == TOKEN_MINUS || e->token.type == TOKEN_STAR || e->token.type == TOKEN_SLASH) {
                     error(g, e->token, "native arithmetic needs a typed int context or operand"); break;
+                }
+                if (!plain_integer_literal(e->left) || !plain_integer_literal(e->right)) {
+                    error(g, e->token, "native comparison needs typed operands when arithmetic is involved"); break;
                 }
                 context = scalar(TYPE_INT);
             }
@@ -301,10 +312,17 @@ static void runtime_failure(Codegen *g, const char *name, const char *message) {
     fprintf(g->data, ".Lmsg_%s: .asciz \"%s\\n\"\n", name, message);
     fprintf(g->text, ".Lnewt_%s:\n  mov edi, 2\n  lea rsi, [rip+.Lmsg_%s]\n  mov edx, %lu\n  call write@PLT\n  mov edi, 1\n  call exit@PLT\n", name, name, (unsigned long)length + 1);
 }
+static int same_source_file(const char *source, const char *output) {
+    struct stat a, b;
+    if (strcmp(source, output) == 0) return 1;
+    return stat(source, &a) == 0 && stat(output, &b) == 0 &&
+           a.st_ino != 0 && a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+}
+
 int emit_native_assembly(const char *path, const char *source, const char *output_path, const char *target) {
     Parser parser; Codegen *g; FILE *output; int i, ok = 0;
     if (strcmp(target, "x86_64-linux") != 0) { fprintf(stderr, "compile error: unsupported target '%s'; supported target: x86_64-linux\n", target); return 0; }
-    if (strcmp(path, output_path) == 0) { fprintf(stderr, "compile error: output must not overwrite the input source\n"); return 0; }
+    if (same_source_file(path, output_path)) { fprintf(stderr, "compile error: output must not overwrite the input source\n"); return 0; }
     parser_init(&parser, path, source);
     if (!parse_program(&parser)) { parser_free(&parser); return 0; }
     g = calloc(1, sizeof(*g)); if (!g) { parser_free(&parser); return 0; }
