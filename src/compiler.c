@@ -4,7 +4,8 @@
 #include "parser.h"
 #include <stdarg.h>
 
-typedef struct { DeclType base; int pointers; Token record; } CType;
+typedef TypeSpec CType;
+typedef struct { Stmt *declaration; int size, align, state; } Record;
 typedef struct { Token name; CType type; int offset, readonly, depth; } Local;
 typedef struct {
     Parser *parser;
@@ -13,6 +14,9 @@ typedef struct {
     int failed, label, bytes, count, depth, break_label, continue_label, return_label;
     Stmt *function;
     Local locals[NEWT_MAX_VARIABLES];
+    Record records[256];
+    int record_count;
+    int *field_offsets;
 } Codegen;
 
 static CType scalar(DeclType base) { CType t = {0}; t.base = base; return t; }
@@ -32,6 +36,79 @@ static int slot(Codegen *g, Token at) {
     if (g->bytes > 1024 * 1024 - 8) { error(g, at, "native stack frame is too large"); return 8; }
     g->bytes += 8; return g->bytes;
 }
+static int equal_type(CType a, CType b) {
+    return a.base == b.base && a.pointers == b.pointers &&
+           (a.base != TYPE_STRUCT || same_name(a.record, b.record));
+}
+static int compatible(CType source, CType destination) {
+    if (source.pointers && destination.pointers) {
+        if (source.is_const && !destination.is_const) return 0;
+        return equal_type(source, destination) || source.base == TYPE_VOID || destination.base == TYPE_VOID;
+    }
+    return equal_type(source, destination);
+}
+static Record *record(Codegen *g, Token name) {
+    int i;
+    for (i = 0; i < g->record_count; ++i)
+        if (same_name(g->records[i].declaration->name, name)) return &g->records[i];
+    error(g, name, "unknown struct type"); return NULL;
+}
+static int type_size(Codegen *, CType, Token);
+static int type_align(Codegen *g, CType t, Token at) {
+    Record *r;
+    if (t.pointers) {
+        if (t.base != TYPE_INT && t.base != TYPE_VOID && t.base != TYPE_STRUCT) error(g, at, "native pointers support int, void, and struct pointees");
+        return 8;
+    }
+    if (t.base == TYPE_INT || t.base == TYPE_BOOL) return 4;
+    if (t.base != TYPE_STRUCT) { error(g, at, "type has no supported native layout"); return 1; }
+    r = record(g, t.record); if (!r) return 1;
+    type_size(g, t, at); return r->align > 0 ? r->align : 1;
+}
+static int type_size(Codegen *g, CType t, Token at) {
+    Record *r; int i, bytes = 0, alignment = 1;
+    if (t.pointers) {
+        if (t.base != TYPE_INT && t.base != TYPE_VOID && t.base != TYPE_STRUCT) error(g, at, "native pointers support int, void, and struct pointees");
+        return 8;
+    }
+    if (t.base == TYPE_INT || t.base == TYPE_BOOL) return 4;
+    if (t.base != TYPE_STRUCT) { error(g, at, "void or unsupported type has no native object size"); return 1; }
+    r = record(g, t.record); if (!r) return 1;
+    if (r->state == 2) return r->size;
+    if (r->state == 1) { error(g, at, "recursive struct by value is not supported; use a pointer"); return 1; }
+    r->state = 1;
+    if (!r->declaration->field_count) error(g, at, "empty native structs are not supported");
+    for (i = 0; i < r->declaration->field_count && !g->failed; ++i) {
+        int index = r->declaration->field_start + i, size, align;
+        Field f = g->parser->fields[index];
+        if (!f.type.pointers && f.type.base != TYPE_INT && f.type.base != TYPE_STRUCT) {
+            error(g, f.name, "native struct fields support int, pointers, and nested structs"); break;
+        }
+        size = type_size(g, f.type, f.name); align = type_align(g, f.type, f.name);
+        if (align > alignment) alignment = align;
+        bytes = (bytes + align - 1) & ~(align - 1); g->field_offsets[index] = bytes;
+        if (size > 1024 * 1024 - bytes) { error(g, at, "struct layout is too large"); break; }
+        bytes += size;
+    }
+    r->align = alignment; r->size = (bytes + alignment - 1) & ~(alignment - 1); r->state = 2;
+    return r->size;
+}
+static int field_index(Codegen *g, CType t, Token name) {
+    Record *r = record(g, t.record); int i;
+    if (!r) return -1;
+    type_size(g, t, name);
+    for (i = 0; i < r->declaration->field_count; ++i) {
+        int index = r->declaration->field_start + i;
+        if (same_name(g->parser->fields[index].name, name)) return index;
+    }
+    error(g, name, "unknown struct field"); return -1;
+}
+static int wide(CType t) { return t.pointers != 0; }
+static void load_memory(Codegen *g, CType t) {
+    if (!t.pointers && t.base == TYPE_STRUCT) return;
+    out(g, t.pointers ? "  mov rax, QWORD PTR [rax]\n" : "  mov eax, DWORD PTR [rax]\n");
+}
+
 static Local *local(Codegen *g, Token name) {
     int i;
     for (i = g->count - 1; i >= 0; --i) if (same_name(g->locals[i].name, name)) return &g->locals[i];
@@ -43,7 +120,11 @@ static Local *declare(Codegen *g, Token name, CType type, int readonly) {
         if (same_name(g->locals[i].name, name)) { error(g, name, "duplicate local variable"); return NULL; }
     if (g->count == NEWT_MAX_VARIABLES) { error(g, name, "too many native variables"); return NULL; }
     v = &g->locals[g->count++]; v->name = name; v->type = type;
-    v->offset = slot(g, name); v->readonly = readonly; v->depth = g->depth; return v;
+    if (!type.pointers && type.base == TYPE_STRUCT) {
+        int size = type_size(g, type, name);
+        if (size > 1024 * 1024 - g->bytes) { error(g, name, "native stack frame is too large"); size = 8; }
+        g->bytes = (g->bytes + 7) & ~7; g->bytes += (size + 7) & ~7; v->offset = g->bytes;
+    } else v->offset = slot(g, name); v->readonly = readonly; v->depth = g->depth; return v;
 }
 static Stmt *function(Codegen *g, Token name) {
     int i;
@@ -54,9 +135,12 @@ static Stmt *function(Codegen *g, Token name) {
     error(g, name, "undefined native function"); return NULL;
 }
 static void symbol(Codegen *g, Stmt *f) {
-    if (f->is_entry) out(g, "main"); else out(g, "newt_%.*s", f->name.length, f->name.start);
+    if (f->is_entry) out(g, "main"); else if (f->is_extern) out(g, "%.*s", f->name.length, f->name.start); else out(g, "newt_%.*s", f->name.length, f->name.start);
 }
 static int supported(Codegen *g, CType t, Token at, int allow_void) {
+    if (t.pointers) {
+        type_size(g, t, at); return !g->failed;
+    }
     if (t.base == TYPE_INT || t.base == TYPE_BOOL || (allow_void && t.base == TYPE_VOID)) return 1;
     error(g, at, "native subset supports typed int, bool, and void; this construct is not compiled"); return 0;
 }
@@ -70,6 +154,9 @@ static int integer_token(Codegen *g, Token t, int negative, int *result) {
     if (n < INT_MIN || n > INT_MAX) { error(g, t, "integer literal is out of int range"); return 0; }
     *result = (int)n; return 1;
 }
+static CType expression(Codegen *, Expr *, CType);
+static CType address(Codegen *, Expr *, int *);
+static int readonly_lvalue(Codegen *, Expr *);
 static CType infer(Codegen *g, Expr *e) {
     if (!e) return scalar(TYPE_VOID);
     switch (e->kind) {
@@ -79,14 +166,37 @@ static CType infer(Codegen *g, Expr *e) {
         case EXPR_CALL: {
             Stmt *f;
             if (e->token.type == TOKEN_INT) return scalar(TYPE_INT);
-            f = function(g, e->token); return scalar(f ? f->declared_type : TYPE_AUTO);
+            f = function(g, e->token); return f ? f->native_type : scalar(TYPE_AUTO);
         }
-        case EXPR_UNARY: return e->token.type == TOKEN_NOT ? scalar(TYPE_BOOL) : infer(g, e->left);
+        case EXPR_UNARY: {
+            CType t = infer(g, e->left);
+            if (e->token.type == TOKEN_NOT) return scalar(TYPE_BOOL);
+            if (e->token.type == TOKEN_AMP) {
+                if (t.pointers) error(g, e->token, "pointer-to-pointer values are outside this milestone");
+                t.pointers++; t.is_const = t.is_const || readonly_lvalue(g, e->left);
+            } else if (e->token.type == TOKEN_STAR) {
+                if (!t.pointers) error(g, e->token, "dereference requires a pointer"); else --t.pointers;
+            }
+            return t;
+        }
+        case EXPR_SIZEOF: return scalar(TYPE_INT);
+        case EXPR_INDEX: {
+            CType t = infer(g, e->left);
+            if (!t.pointers) error(g, e->token, "native indexing requires a pointer"); else --t.pointers;
+            return t;
+        }
+        case EXPR_MEMBER: {
+            CType t = infer(g, e->left); int index;
+            if (e->is_arrow) { if (!t.pointers) error(g, e->token, "arrow access requires a struct pointer"); else --t.pointers; }
+            if (t.pointers || t.base != TYPE_STRUCT) { error(g, e->token, "member access requires a struct"); return scalar(TYPE_AUTO); }
+            index = field_index(g, t, e->token);
+            return index >= 0 ? g->parser->fields[index].type : scalar(TYPE_AUTO);
+        }
         case EXPR_BINARY: {
             CType a = infer(g, e->left), b = infer(g, e->right);
             switch (e->token.type) {
                 case TOKEN_PLUS: case TOKEN_MINUS: case TOKEN_STAR: case TOKEN_SLASH:
-                    return a.base == TYPE_AUTO ? b : a;
+                    return a.pointers ? a : b.pointers ? b : a.base == TYPE_AUTO ? b : a;
                 default: return scalar(TYPE_BOOL);
             }
         }
@@ -96,8 +206,61 @@ static CType infer(Codegen *g, Expr *e) {
 static CType expression(Codegen *, Expr *, CType);
 static void block(Codegen *, int *, int);
 
+static int readonly_lvalue(Codegen *g, Expr *e) {
+    if (e->kind == EXPR_IDENT) { Local *v = local(g, e->token); return v ? v->readonly : 1; }
+    if (e->kind == EXPR_INDEX || (e->kind == EXPR_UNARY && e->token.type == TOKEN_STAR)) return infer(g, e->left).is_const;
+    if (e->kind == EXPR_MEMBER) {
+        CType base = infer(g, e->left); int index;
+        int readonly = e->is_arrow ? base.is_const : readonly_lvalue(g, e->left);
+        if (e->is_arrow && base.pointers) --base.pointers;
+        index = field_index(g, base, e->token);
+        if (index < 0) return 1;
+        return readonly || (g->parser->fields[index].type.is_const && !g->parser->fields[index].type.pointers);
+    }
+    return 0;
+}
+
+static CType address(Codegen *g, Expr *e, int *readonly) {
+    CType t = scalar(TYPE_AUTO); int saved, index, size;
+    *readonly = 0;
+    if (e->kind == EXPR_IDENT) {
+        Local *v = local(g, e->token); if (!v) return t;
+        out(g, "  lea rax, [rbp-%d]\n", v->offset); *readonly = v->readonly;
+        return v->type;
+    }
+    if (e->kind == EXPR_UNARY && e->token.type == TOKEN_STAR) {
+        t = expression(g, e->left, scalar(TYPE_AUTO));
+        if (!t.pointers) { error(g, e->token, "dereference requires a pointer"); return t; }
+        --t.pointers; type_size(g, t, e->token); *readonly = t.is_const; return t;
+    }
+    if (e->kind == EXPR_INDEX) {
+        t = expression(g, e->left, scalar(TYPE_AUTO));
+        if (!t.pointers) { error(g, e->token, "native indexing requires a pointer"); return t; }
+        --t.pointers; size = type_size(g, t, e->token);
+        saved = slot(g, e->token); out(g, "  mov QWORD PTR [rbp-%d], rax\n", saved);
+        expression(g, e->right, scalar(TYPE_INT));
+        out(g, "  movsxd rax, eax\n  imul rax, %d\n  add rax, QWORD PTR [rbp-%d]\n", size, saved);
+        *readonly = t.is_const; return t;
+    }
+    if (e->kind == EXPR_MEMBER) {
+        int base_readonly = 0;
+        if (e->is_arrow) {
+            t = expression(g, e->left, scalar(TYPE_AUTO));
+            if (!t.pointers) { error(g, e->token, "arrow access requires a pointer"); return t; }
+            --t.pointers; base_readonly = t.is_const;
+        } else t = address(g, e->left, &base_readonly);
+        if (t.base != TYPE_STRUCT || t.pointers) { error(g, e->token, "member access requires a struct"); return t; }
+        index = field_index(g, t, e->token); if (index < 0) return t;
+        out(g, "  add rax, %d\n", g->field_offsets[index]);
+        t = g->parser->fields[index].type;
+        *readonly = base_readonly || (t.is_const && !t.pointers); return t;
+    }
+    error(g, e->token, "expression is not an addressable object"); return t;
+}
+
 static CType call(Codegen *g, Expr *e) {
     static const char *regs[] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
+    static const char *regs64[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
     Stmt *f; int offsets[6], i;
     if (e->token.type == TOKEN_INT) {
         Expr *a;
@@ -114,11 +277,14 @@ static CType call(Codegen *g, Expr *e) {
     }
     for (i = 0; i < e->argument_count; ++i) {
         Parameter p = g->parser->parameters[f->parameter_start + i];
-        expression(g, g->parser->call_arguments[e->argument_start + i], scalar(p.type));
-        offsets[i] = slot(g, e->token); out(g, "  mov DWORD PTR [rbp-%d], eax\n", offsets[i]);
+        expression(g, g->parser->call_arguments[e->argument_start + i], p.native_type);
+        offsets[i] = slot(g, e->token); out(g, wide(p.native_type) ? "  mov QWORD PTR [rbp-%d], rax\n" : "  mov DWORD PTR [rbp-%d], eax\n", offsets[i]);
     }
-    for (i = 0; i < e->argument_count; ++i) out(g, "  mov %s, DWORD PTR [rbp-%d]\n", regs[i], offsets[i]);
-    out(g, "  call "); symbol(g, f); out(g, "\n"); return scalar(f->declared_type);
+    for (i = 0; i < e->argument_count; ++i) {
+        CType t = g->parser->parameters[f->parameter_start + i].native_type;
+        out(g, wide(t) ? "  mov %s, QWORD PTR [rbp-%d]\n" : "  mov %s, DWORD PTR [rbp-%d]\n", wide(t) ? regs64[i] : regs[i], offsets[i]);
+    }
+    out(g, "  call "); symbol(g, f); out(g, "\n"); return f->native_type;
 }
 static CType expression(Codegen *g, Expr *e, CType expected) {
     CType type = scalar(TYPE_AUTO); int value, saved, label; CType context;
@@ -126,15 +292,34 @@ static CType expression(Codegen *g, Expr *e, CType expected) {
     switch (e->kind) {
         case EXPR_NUMBER:
             if (integer_token(g, e->token, 0, &value)) out(g, "  mov eax, %d\n", value);
-            type = scalar(expected.base == TYPE_INT ? TYPE_INT : TYPE_AUTO); break;
+            if (expected.pointers) {
+                if (value != 0) error(g, e->token, "only zero is an implicit null pointer literal");
+                type = expected;
+            } else type = scalar(expected.base == TYPE_INT ? TYPE_INT : TYPE_AUTO);
+            break;
         case EXPR_TRUE: case EXPR_FALSE:
             out(g, "  mov eax, %d\n", e->kind == EXPR_TRUE); type = scalar(TYPE_BOOL); break;
         case EXPR_IDENT: {
             Local *v = local(g, e->token); if (!v) break;
-            out(g, "  mov eax, DWORD PTR [rbp-%d]\n", v->offset); type = v->type; break;
+            out(g, wide(v->type) ? "  mov rax, QWORD PTR [rbp-%d]\n" : "  mov eax, DWORD PTR [rbp-%d]\n", v->offset); type = v->type; break;
         }
         case EXPR_CALL: type = call(g, e); break;
+        case EXPR_SIZEOF:
+            out(g, "  mov eax, %d\n", type_size(g, e->native_type, e->token)); type = scalar(TYPE_INT); break;
+        case EXPR_MEMBER: case EXPR_INDEX: {
+            int readonly;
+            type = address(g, e, &readonly); load_memory(g, type); break;
+        }
         case EXPR_UNARY:
+            if (e->token.type == TOKEN_AMP || e->token.type == TOKEN_STAR) {
+                int readonly;
+                if (e->token.type == TOKEN_AMP) {
+                    type = address(g, e->left, &readonly);
+                    if (type.pointers) error(g, e->token, "pointer-to-pointer values are outside this milestone");
+                    ++type.pointers; type.is_const = type.is_const || readonly;
+                } else { type = address(g, e, &readonly); load_memory(g, type); }
+                break;
+            }
             if (e->token.type == TOKEN_MINUS && e->left->kind == EXPR_NUMBER) {
                 if (integer_token(g, e->left->token, 1, &value)) out(g, "  mov eax, %d\n", value);
                 type = scalar(expected.base == TYPE_INT ? TYPE_INT : TYPE_AUTO); break;
@@ -144,6 +329,33 @@ static CType expression(Codegen *g, Expr *e, CType expected) {
             else out(g, "  neg eax\n  jo .Lnewt_overflow\n");
             break;
         case EXPR_BINARY:
+            if (infer(g, e->left).pointers || infer(g, e->right).pointers) {
+                CType left_type = infer(g, e->left), right_type = infer(g, e->right);
+                int pointer_left = left_type.pointers != 0;
+                CType pointer_type = pointer_left ? left_type : right_type;
+                if ((e->token.type == TOKEN_PLUS || e->token.type == TOKEN_MINUS) && !(left_type.pointers && right_type.pointers)) {
+                    CType element = pointer_type;
+                    if (!pointer_left && e->token.type == TOKEN_MINUS) { error(g, e->token, "cannot subtract a pointer from an integer"); break; }
+                    int index_slot = slot(g, e->token);
+                    saved = slot(g, e->token);
+                    if (pointer_left) {
+                        expression(g, e->left, pointer_type); out(g, "  mov QWORD PTR [rbp-%d], rax\n", saved);
+                        expression(g, e->right, scalar(TYPE_INT)); out(g, "  mov DWORD PTR [rbp-%d], eax\n", index_slot);
+                    } else {
+                        expression(g, e->left, scalar(TYPE_INT)); out(g, "  mov DWORD PTR [rbp-%d], eax\n", index_slot);
+                        expression(g, e->right, pointer_type); out(g, "  mov QWORD PTR [rbp-%d], rax\n", saved);
+                    }
+                    --element.pointers;
+                    out(g, "  movsxd rcx, DWORD PTR [rbp-%d]\n  imul rcx, %d\n  mov rax, QWORD PTR [rbp-%d]\n  %s rax, rcx\n", index_slot, type_size(g, element, e->token), saved, e->token.type == TOKEN_PLUS ? "add" : "sub");
+                    type = pointer_type; break;
+                }
+                pointer_type.is_const = left_type.is_const || right_type.is_const;
+                if (e->token.type != TOKEN_EQUAL_EQUAL && e->token.type != TOKEN_BANG_EQUAL) { error(g, e->token, "unsupported pointer operation"); break; }
+                expression(g, e->left, pointer_type); saved = slot(g, e->token);
+                out(g, "  mov QWORD PTR [rbp-%d], rax\n", saved); expression(g, e->right, pointer_type);
+                out(g, "  mov rcx, rax\n  mov rax, QWORD PTR [rbp-%d]\n  cmp rax, rcx\n  set%s al\n  movzx eax, al\n", saved, e->token.type == TOKEN_EQUAL_EQUAL ? "e" : "ne");
+                type = scalar(TYPE_BOOL); break;
+            }
             if (e->token.type == TOKEN_AND || e->token.type == TOKEN_OR) {
                 label = g->label++;
                 expression(g, e->left, scalar(TYPE_BOOL));
@@ -189,7 +401,8 @@ static CType expression(Codegen *g, Expr *e, CType expected) {
             break;
         default: error(g, e->token, "expression is outside the native subset"); break;
     }
-    if (expected.base != TYPE_AUTO && type.base != expected.base) error(g, e->token, "native expression does not match the declared type");
+    if (type.pointers) type_size(g, type, e->token);
+    if (expected.base != TYPE_AUTO && !compatible(type, expected)) error(g, e->token, "native expression does not match the declared type");
     return type;
 }
 static void print_expression(Codegen *g, Expr *e) {
@@ -206,43 +419,122 @@ static void print_expression(Codegen *g, Expr *e) {
         out(g, "  lea rsi, [rip+.Lstring%d]\n  lea rdi, [rip+.Lfmt_%s]\n  xor eax, eax\n  call printf@PLT\n", label, trailing_newline ? "raw" : "string");
     } else {
         CType t = expression(g, e, scalar(TYPE_AUTO));
-        if (t.base == TYPE_VOID) { error(g, e->token, "void functions do not produce values"); return; }
+        if (t.pointers || t.base == TYPE_STRUCT || t.base == TYPE_VOID) { error(g, e->token, "native print requires int, bool, or a string literal"); return; }
         if (t.base == TYPE_BOOL) {
             out(g, "  test eax, eax\n  lea rsi, [rip+.Ltrue]\n  lea rdx, [rip+.Lfalse]\n  cmovz rsi, rdx\n  lea rdi, [rip+.Lfmt_string]\n");
         } else out(g, "  mov esi, eax\n  lea rdi, [rip+.Lfmt_int]\n");
         out(g, "  xor eax, eax\n  call printf@PLT\n");
     }
 }
+static void initialize_record(Codegen *g, CType type, Expr *e, int offset) {
+    Record *r = record(g, type.record); int i;
+    if (!r) return;
+    if (!e || e->kind != EXPR_AGGREGATE || e->element_count != r->declaration->field_count) {
+        error(g, e ? e->token : type.record, "struct initialization requires one value per field in { ... }"); return;
+    }
+    type_size(g, type, type.record);
+    for (i = 0; i < e->element_count && !g->failed; ++i) {
+        int index = r->declaration->field_start + i, target = offset - g->field_offsets[index];
+        CType field = g->parser->fields[index].type;
+        Expr *value = g->parser->list_elements[e->element_start + i];
+        if (!field.pointers && field.base == TYPE_STRUCT) initialize_record(g, field, value, target);
+        else { expression(g, value, field); out(g, wide(field) ? "  mov QWORD PTR [rbp-%d], rax\n" : "  mov DWORD PTR [rbp-%d], eax\n", target); }
+    }
+}
+static int input_register(Token token, int *is_wide) {
+    static const char *names[] = {"rax","rdi","rsi","rdx","rcx","r8","r9","rbx","r12","r13","r14","r15",
+                                  "eax","edi","esi","edx","ecx","r8d","r9d","ebx","r12d","r13d","r14d","r15d"};
+    int i;
+    for (i = 0; i < 24; ++i) if (token_text_equals(token, names[i])) { *is_wide = i < 12; return i % 12; }
+    return -1;
+}
+static void assembly(Codegen *g, Stmt *s) {
+    static const char *preserved[] = {"rbx","r12","r13","r14","r15"};
+    int saves[5], values[6], widths[6], ids[6], i, j, result_slot = slot(g, s->name);
+    CType types[6]; Local *destination = NULL;
+    if (s->asm_has_output) {
+        destination = local(g, s->name);
+        if (!destination) return;
+        if (destination->readonly || (!destination->type.pointers && destination->type.base == TYPE_STRUCT)) {
+            error(g, s->name, "assembly output requires a mutable scalar or pointer binding"); return;
+        }
+    }
+    for (i = 0; i < s->asm_count; ++i) {
+        ids[i] = input_register(s->asm_regs[i], &widths[i]);
+        if (ids[i] < 0) { error(g, s->asm_regs[i], "unsupported input register; rsp/rbp cannot be bound"); return; }
+        for (j = 0; j < i; ++j) if (ids[i] == ids[j]) { error(g, s->asm_regs[i], "duplicate assembly input register or alias"); return; }
+        types[i] = expression(g, s->asm_values[i], scalar(TYPE_AUTO));
+        if ((!types[i].pointers && types[i].base != TYPE_INT && types[i].base != TYPE_BOOL && types[i].base != TYPE_AUTO) || (types[i].pointers && !widths[i])) {
+            error(g, s->asm_regs[i], "assembly input type does not fit the register"); return;
+        }
+        values[i] = slot(g, s->name); out(g, wide(types[i]) ? "  mov QWORD PTR [rbp-%d], rax\n" : "  mov DWORD PTR [rbp-%d], eax\n", values[i]);
+    }
+    for (i = 0; i < 5; ++i) { saves[i] = slot(g, s->name); out(g, "  mov QWORD PTR [rbp-%d], %s\n", saves[i], preserved[i]); }
+    for (i = 0; i < s->asm_count; ++i) {
+        Token reg = s->asm_regs[i];
+        out(g, wide(types[i]) ? "  mov %.*s, QWORD PTR [rbp-%d]\n" : widths[i] ? "  movsxd %.*s, DWORD PTR [rbp-%d]\n" : "  mov %.*s, DWORD PTR [rbp-%d]\n", reg.length, reg.start, values[i]);
+    }
+    out(g, "  # begin user assembly\n%.*s\n  # end user assembly\n", s->asm_text.length - 4, s->asm_text.start + 2);
+    out(g, "  mov QWORD PTR [rbp-%d], rax\n", result_slot);
+    for (i = 0; i < 5; ++i) out(g, "  mov %s, QWORD PTR [rbp-%d]\n", preserved[i], saves[i]);
+    if (destination) {
+        out(g, "  mov rax, QWORD PTR [rbp-%d]\n", result_slot);
+        if (!destination->type.pointers && destination->type.base == TYPE_BOOL) out(g, "  test eax, eax\n  setne al\n  movzx eax, al\n");
+        out(g, wide(destination->type) ? "  mov QWORD PTR [rbp-%d], rax\n" : "  mov DWORD PTR [rbp-%d], eax\n", destination->offset);
+    }
+}
+
 static void statement(Codegen *g, Stmt *s) {
     int a, b, previous_break, previous_continue;
     Local *v;
     if (g->failed) return;
     switch (s->kind) {
+        case STMT_STRUCT: error(g, s->name, "struct declarations must be at top level"); break;
+        case STMT_ASM: assembly(g, s); break;
+        case STMT_MEMORY_ASSIGN: case STMT_INDEX_ASSIGN: {
+            int readonly, saved; CType t = address(g, s->target, &readonly);
+            if (readonly || (!t.pointers && t.base == TYPE_STRUCT)) { error(g, s->name, "cannot assign through a const or aggregate target"); break; }
+            saved = slot(g, s->name); out(g, "  mov QWORD PTR [rbp-%d], rax\n", saved);
+            expression(g, s->expression, t); out(g, "  mov rcx, QWORD PTR [rbp-%d]\n", saved);
+            out(g, wide(t) ? "  mov QWORD PTR [rcx], rax\n" : "  mov DWORD PTR [rcx], eax\n"); break;
+        }
         case STMT_LET_DECL: case STMT_MUT_DECL:
-            supported(g, scalar(s->declared_type), s->name, 0);
-            expression(g, s->expression, scalar(s->declared_type));
-            v = declare(g, s->name, scalar(s->declared_type), s->kind == STMT_LET_DECL);
-            if (v) out(g, "  mov DWORD PTR [rbp-%d], eax\n", v->offset);
+            if (!s->native_type.pointers && s->native_type.base == TYPE_STRUCT) {
+                v = declare(g, s->name, s->native_type, s->kind == STMT_LET_DECL);
+                if (v) {
+                    out(g, "  lea rdi, [rbp-%d]\n  xor eax, eax\n  mov ecx, %d\n  rep stosb\n", v->offset, type_size(g, s->native_type, s->name));
+                    initialize_record(g, s->native_type, s->expression, v->offset);
+                }
+            } else {
+                supported(g, s->native_type, s->name, 0);
+                expression(g, s->expression, s->native_type);
+                v = declare(g, s->name, s->native_type, s->kind == STMT_LET_DECL);
+                if (v) out(g, wide(v->type) ? "  mov QWORD PTR [rbp-%d], rax\n" : "  mov DWORD PTR [rbp-%d], eax\n", v->offset);
+            }
             break;
         case STMT_ASSIGN:
             v = local(g, s->name); if (!v) break;
             if (v->readonly) { error(g, s->name, "cannot assign to immutable variable"); break; }
-            expression(g, s->expression, v->type); out(g, "  mov DWORD PTR [rbp-%d], eax\n", v->offset); break;
+            if (!v->type.pointers && v->type.base == TYPE_STRUCT) { error(g, s->name, "struct copying is not supported"); break; }
+            expression(g, s->expression, v->type); out(g, wide(v->type) ? "  mov QWORD PTR [rbp-%d], rax\n" : "  mov DWORD PTR [rbp-%d], eax\n", v->offset); break;
         case STMT_CALL: call(g, s->expression); break;
         case STMT_PRINT: print_expression(g, s->expression); break;
         case STMT_RETURN:
-            if (g->function->declared_type == TYPE_VOID) {
+            if (g->function->declared_type == TYPE_VOID && !g->function->native_type.pointers) {
                 if (s->expression) error(g, s->name, "void function cannot return a value");
                 out(g, "  xor eax, eax\n");
             } else {
                 if (!s->expression) { error(g, s->name, "typed return requires a value"); break; }
-                expression(g, s->expression, scalar(g->function->declared_type));
+                expression(g, s->expression, g->function->native_type);
             }
             out(g, "  jmp .Lreturn%d\n", g->return_label); break;
         case STMT_IF:
             a = g->label++; b = g->label++;
-            if (expression(g, s->expression, scalar(TYPE_AUTO)).base == TYPE_VOID) error(g, s->name, "void value cannot be a condition");
-            out(g, "  test eax, eax\n  jz .Lif%d\n", a);
+            {
+                CType condition = expression(g, s->expression, scalar(TYPE_AUTO));
+                if (!condition.pointers && (condition.base == TYPE_VOID || condition.base == TYPE_STRUCT)) error(g, s->name, "condition requires a scalar value");
+                out(g, condition.pointers ? "  test rax, rax\n  jz .Lif%d\n" : "  test eax, eax\n  jz .Lif%d\n", a);
+            }
             block(g, s->then_statements, s->then_count); out(g, "  jmp .Lif%d\n.Lif%d:\n", b, a);
             if (s->has_else) block(g, s->else_statements, s->else_count);
             out(g, ".Lif%d:\n", b); break;
@@ -250,8 +542,11 @@ static void statement(Codegen *g, Stmt *s) {
             a = g->label++; b = g->label++; previous_break = g->break_label; previous_continue = g->continue_label;
             g->break_label = b; g->continue_label = a;
             out(g, ".Lloop%d:\n", a);
-            if (expression(g, s->expression, scalar(TYPE_AUTO)).base == TYPE_VOID) error(g, s->name, "void value cannot be a condition");
-            out(g, "  test eax, eax\n  jz .Lloop%d\n", b); block(g, s->body_statements, s->body_count);
+            {
+                CType condition = expression(g, s->expression, scalar(TYPE_AUTO));
+                if (!condition.pointers && (condition.base == TYPE_VOID || condition.base == TYPE_STRUCT)) error(g, s->name, "condition requires a scalar value");
+                out(g, condition.pointers ? "  test rax, rax\n  jz .Lloop%d\n" : "  test eax, eax\n  jz .Lloop%d\n", b);
+            } block(g, s->body_statements, s->body_count);
             out(g, "  jmp .Lloop%d\n.Lloop%d:\n", a, b);
             g->break_label = previous_break; g->continue_label = previous_continue; break;
         case STMT_BREAK: case STMT_CONTINUE:
@@ -274,20 +569,21 @@ static int copy_stream(FILE *destination, FILE *source) {
 }
 static void compile_function(Codegen *g, Stmt *s) {
     static const char *regs[] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
+    static const char *regs64[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
     int i; FILE *body = tmpfile();
     if (!body) { error(g, s->name, "cannot create compiler temporary stream"); return; }
     g->body = body; g->function = s; g->bytes = 0; g->count = 0; g->depth = 0;
     g->return_label = g->label++; g->break_label = g->continue_label = -1;
-    supported(g, scalar(s->declared_type), s->name, 1);
+    supported(g, s->native_type, s->name, 1);
     if (s->parameter_count > 6) error(g, s->name, "native functions support at most six parameters");
     for (i = 0; i < s->parameter_count && !g->failed; ++i) {
         Parameter p = g->parser->parameters[s->parameter_start + i]; Local *v;
-        supported(g, scalar(p.type), p.name, 0); v = declare(g, p.name, scalar(p.type), !p.is_mutable);
-        if (v) out(g, "  mov DWORD PTR [rbp-%d], %s\n", v->offset, regs[i]);
+        supported(g, p.native_type, p.name, 0); v = declare(g, p.name, p.native_type, !p.is_mutable);
+        if (v) out(g, wide(p.native_type) ? "  mov QWORD PTR [rbp-%d], %s\n" : "  mov DWORD PTR [rbp-%d], %s\n", v->offset, wide(p.native_type) ? regs64[i] : regs[i]);
     }
     /* The outer function body shares the parameter scope, as in C. */
     for (i = 0; i < s->body_count && !g->failed; ++i) statement(g, &g->parser->statements[s->body_statements[i]]);
-    if (s->declared_type == TYPE_VOID) out(g, "  xor eax, eax\n"); else out(g, "  jmp .Lnewt_missing_return\n");
+    if (s->declared_type == TYPE_VOID && !s->native_type.pointers) out(g, "  xor eax, eax\n"); else out(g, "  jmp .Lnewt_missing_return\n");
     out(g, ".Lreturn%d:\n  leave\n  ret\n", g->return_label);
     g->body = g->text;
     if (s->is_entry) out(g, ".globl main\n");
@@ -313,14 +609,38 @@ int emit_native_assembly(const char *path, const char *source, const char *outpu
     if (parser.entry_statement < 0) { fprintf(stderr, "compile error: native programs require start: and a typed main\n"); goto done; }
     fprintf(g->text, ".intel_syntax noprefix\n.text\n");
     fprintf(g->data, ".section .rodata\n.Lfmt_int: .asciz \"%%d\\n\"\n.Lfmt_string: .asciz \"%%s\\n\"\n.Lfmt_raw: .asciz \"%%s\"\n.Ltrue: .asciz \"true\"\n.Lfalse: .asciz \"false\"\n");
+    g->body = g->text;
+    g->field_offsets = calloc((size_t)parser.field_count + 1, sizeof(int));
+    if (!g->field_offsets) { fprintf(stderr, "compile error: cannot allocate struct layout table\n"); goto done; }
+    for (i = 0; i < parser.top_level_statement_count && !g->failed; ++i) {
+        Stmt *s = &parser.statements[parser.top_level_statements[i]];
+        if (s->kind == STMT_STRUCT) {
+            int j;
+            if (g->record_count == 256) { error(g, s->name, "too many native structs"); break; }
+            for (j = 0; j < g->record_count; ++j) if (same_name(g->records[j].declaration->name, s->name)) error(g, s->name, "duplicate native struct");
+            g->records[g->record_count++].declaration = s;
+        }
+    }
+    for (i = 0; i < g->record_count && !g->failed; ++i) type_size(g, g->records[i].declaration->native_type, g->records[i].declaration->name);
     for (i = 0; i < parser.top_level_statement_count && !g->failed; ++i) {
         int j; Stmt *s = &parser.statements[parser.top_level_statements[i]];
+        if (s->kind == STMT_STRUCT) continue;
         if (s->kind != STMT_FN_DECL) { error(g, s->name, "native subset requires globals to be moved into functions"); break; }
         for (j = 0; j < i; ++j) {
             Stmt *previous = &parser.statements[parser.top_level_statements[j]];
-            if (same_name(previous->name, s->name)) error(g, s->name, "duplicate native function");
+            if (previous->kind == STMT_FN_DECL && same_name(previous->name, s->name)) error(g, s->name, "duplicate native function");
         }
-        compile_function(g, s);
+        if (s->is_extern) {
+            int j;
+            supported(g, s->native_type, s->name, 1);
+            if (!s->native_type.pointers && s->native_type.base == TYPE_BOOL) error(g, s->name, "external ABI currently supports int, void, and pointers");
+            if (s->parameter_count > 6) error(g, s->name, "external calls support at most six parameters");
+            for (j = 0; j < s->parameter_count; ++j) {
+                Parameter p = parser.parameters[s->parameter_start + j]; supported(g, p.native_type, p.name, 0);
+                if (!p.native_type.pointers && p.type == TYPE_BOOL) error(g, p.name, "external ABI currently supports int, void, and pointers");
+            }
+            out(g, ".extern "); symbol(g, s); out(g, "\n");
+        } else compile_function(g, s);
     }
     runtime_failure(g, "overflow", "native error: int arithmetic overflow");
     runtime_failure(g, "divzero", "native error: division by zero");
@@ -335,5 +655,5 @@ int emit_native_assembly(const char *path, const char *source, const char *outpu
 done:
     if (g->text) fclose(g->text);
     if (g->data) fclose(g->data);
-    free(g); parser_free(&parser); return ok;
+    free(g->field_offsets); free(g); parser_free(&parser); return ok;
 }

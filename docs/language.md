@@ -1,6 +1,6 @@
 # Newt language guide
 
-Newt is an experimental systems-language project currently implemented as an interpreter. Simple statements require `;`, even at the end of a file. Blocks use `{ }`; the opening brace may be on the header line or the following line. A closing `}` needs no semicolon.
+Newt is an experimental systems-language project with an interpreter and a restricted native assembly compiler. Simple statements require `;`, even at the end of a file. Blocks use `{ }`; the opening brace may be on the header line or the following line. A closing `}` needs no semicolon.
 
 ## Program entry
 
@@ -246,3 +246,7 @@ print arg(1);
 
 This prints `2`, `hello`, and `newt`. An index outside the available arguments is a runtime error.
 
+
+## Native systems code
+
+Use `--emit-asm` for one-level pointers, struct layout, `sizeof(type)`, external C signatures, and `{{ }}` assembly blocks. The interpreter does not execute these memory/register operations. The supported target is x86-64 Linux / System V, using GNU assembler Intel syntax and a host C library. The README documents the exact subset, build/link commands, const-pointer rules, assembly input/output bindings, and raw-code obligations. `examples/native_systems.nt` and `examples/native_interop.nt` are runnable compiler examples.

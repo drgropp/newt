@@ -175,3 +175,13 @@ python3 tests/test_native_compiler.py
 ```
 
 The check emits assembly, links it, and executes each supported program, comparing stdout and exit status with the interpreter. Runtime failures compare diagnostic meaning, since native errors do not currently include source locations. Unsupported features must fail compilation before creating assembly output. All native subprocesses have a timeout.
+
+## Native systems checks
+
+On x86-64 Linux:
+
+```sh
+python3 tests/test_native_systems.py
+```
+
+This suite assembles, links, and runs pointer operations, const access paths, nested/C-compatible structs, external C calls, and raw assembly inputs/outputs. A machine-code caller checks preservation of all five non-frame SysV callee-saved registers. Rejection checks cover invalid memory types, layout cycles, const writes, register aliases/widths, and interpreter/native boundaries. It also checks raw-token source positions and that a compilation failure preserves existing output. The generated C bridge and executables live only in temporary directories.

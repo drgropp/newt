@@ -106,6 +106,11 @@ int token_text_equals(Token token, const char *text) {
 }
 
 static TokenType keyword_type(Token token) {
+    if (token_text_equals(token, "struct")) return TOKEN_STRUCT;
+    if (token_text_equals(token, "extern")) return TOKEN_EXTERN;
+    if (token_text_equals(token, "asm")) return TOKEN_ASM;
+    if (token_text_equals(token, "sizeof")) return TOKEN_SIZEOF;
+
     if (token_text_equals(token, "start")) return TOKEN_START;
     if (token_text_equals(token, "int")) return TOKEN_INT;
     if (token_text_equals(token, "float")) return TOKEN_FLOAT;
@@ -319,7 +324,7 @@ Token next_token(Lexer *lexer) {
         case '+':
             return make_token(lexer, TOKEN_PLUS);
         case '-':
-            return make_token(lexer, TOKEN_MINUS);
+            return make_token(lexer, lexer_match(lexer, '>') ? TOKEN_ARROW : TOKEN_MINUS);
         case '*':
             return make_token(lexer, TOKEN_STAR);
         case '/':
@@ -335,7 +340,7 @@ Token next_token(Lexer *lexer) {
             if (lexer_match(lexer, '&')) {
                 return make_token(lexer, TOKEN_AND);
             }
-            break;
+            return make_token(lexer, TOKEN_AMP);
         case '|':
             if (lexer_match(lexer, '|')) {
                 return make_token(lexer, TOKEN_OR);
@@ -346,6 +351,25 @@ Token next_token(Lexer *lexer) {
         case '>':
             return make_token(lexer, lexer_match(lexer, '=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
         case '{':
+            if (lexer_match(lexer, '{')) {
+                int quoted = 0, escaped = 0, comment = 0;
+                /* Assembly owns its punctuation and comments. Only an unquoted,
+                   uncommented }} terminates this opaque source region. */
+                while (!lexer_is_at_end(lexer)) {
+                    char c = lexer_peek(lexer);
+                    if (!quoted && !comment && c == '}' && lexer_peek_next(lexer) == '}') {
+                        lexer_advance(lexer); lexer_advance(lexer);
+                        return make_token(lexer, TOKEN_ASM_BLOCK);
+                    }
+                    lexer_advance(lexer);
+                    if (comment) { if (c == '\n') comment = 0; continue; }
+                    if (escaped) { escaped = 0; continue; }
+                    if (quoted && c == '\\') { escaped = 1; continue; }
+                    if (c == '"') quoted = !quoted;
+                    if (!quoted && c == '#') comment = 1;
+                }
+                return make_error_token(lexer, "unterminated assembly block");
+            }
             return make_token(lexer, TOKEN_LEFT_BRACE);
         case '}':
             return make_token(lexer, TOKEN_RIGHT_BRACE);
@@ -395,6 +419,13 @@ static const char *token_type_name(TokenType type) {
         case TOKEN_BOOL: return "BOOL";
         case TOKEN_STRING_TYPE: return "STRING_TYPE";
         case TOKEN_LIST_TYPE: return "LIST_TYPE";
+        case TOKEN_STRUCT: return "STRUCT";
+        case TOKEN_EXTERN: return "EXTERN";
+        case TOKEN_ASM: return "ASM";
+        case TOKEN_ASM_BLOCK: return "ASM_BLOCK";
+        case TOKEN_SIZEOF: return "SIZEOF";
+        case TOKEN_AMP: return "AMP";
+        case TOKEN_ARROW: return "ARROW";
         case TOKEN_START: return "START";
         case TOKEN_COLON: return "COLON";
         case TOKEN_CONST: return "CONST";
