@@ -53,7 +53,7 @@ Simple statements need `;`, including the final statement in a file. A closing `
 Newt currently builds with GCC:
 
 ```sh
-gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c -lm
+gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c -lm
 ```
 
 Or use the small Makefile:
@@ -433,6 +433,7 @@ newt/
     parser.c/.h     tokens -> statement and expression trees
     interpreter.c/.h  runs the trees
     builtins.c/.h   built-in functions (files, text, lists, math)
+    numeric.c/.h    typed numeric arithmetic and checked conversions
   README.md
   TESTING.md
   regression_tests.bat

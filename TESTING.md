@@ -149,3 +149,15 @@ Add a small `.nt` file under `tests/cases`, then add one entry to `$Tests` in `t
 
 Keep cases deterministic and avoid depending on machine-specific absolute paths, locale-specific text, or existing user files.
 
+
+## Numeric reference check
+
+With Python 3 and GCC installed, compare supported numeric operations with a compiled C reference:
+
+```sh
+python3 tests/check_numeric_reference.py
+```
+
+On Windows, `python tests/check_numeric_reference.py` also works. Use `--newt PATH` to select an interpreter executable or `--cc PATH` to select a C compiler. The deterministic check compares 129 results across signed integer arithmetic, integer division, float/double arithmetic, float rounding, and numeric conversions. Integer inputs avoid C overflow and division by zero; error behavior is covered by the regular regression suite. Temporary C/Newt sources and the reference executable are removed automatically.
+
+`src/numeric.c` owns typed arithmetic and conversions. The build rejects hosts that do not have 8-bit bytes, signed 32-bit `int`, binary32 `float`, and binary64 `double`. Both `build.bat` and `test_newt.bat` compile the complete interpreter, including this module.

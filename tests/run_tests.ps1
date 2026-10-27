@@ -16,6 +16,41 @@ function Normalize-Newlines([string]$Text) {
 
 $Tests = @(
     @{
+        Name = "bad_numeric_subtract"
+        Arguments = "tests/cases/bad_numeric_subtract.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_numeric_subtract.nt:1:30: runtime error: int arithmetic overflow`n"
+    },
+    @{
+        Name = "bad_numeric_literal_range"
+        Arguments = "tests/cases/bad_numeric_literal_range.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_numeric_literal_range.nt:1:9: runtime error: value is not representable as int`n"
+    },
+    @{
+        Name = "bad_numeric_float_int_range"
+        Arguments = "tests/cases/bad_numeric_float_int_range.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_numeric_float_int_range.nt:1:9: runtime error: value is not representable as int`n"
+    },
+    @{
+        Name = "bad_numeric_float_divzero"
+        Arguments = "tests/cases/bad_numeric_float_divzero.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_numeric_float_divzero.nt:1:22: runtime error: division by zero`n"
+    },
+    @{
+        Name = "bad_numeric_double_divzero"
+        Arguments = "tests/cases/bad_numeric_double_divzero.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_numeric_double_divzero.nt:1:23: runtime error: division by zero`n"
+    },
+    @{
         Name = "large typed doubles print safely"
         Arguments = "tests/cases/types_large_double.nt"
         ExitCode = 0
