@@ -1,0 +1,7 @@
+if false { print 0; } ;# branch ends
+;# between branches
+else ;# before opening brace
+{ print "{ } {{ }} end"; }
+fn empty() ;# header
+{}
+empty();

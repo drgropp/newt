@@ -6,7 +6,7 @@ append(names, "river");
 print names[0];
 print length(names);
 
-for name in names
+for name in names {
     print name;
-end;
+}
 

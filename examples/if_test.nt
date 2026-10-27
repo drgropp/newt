@@ -2,17 +2,17 @@
 
 let crop_value = 20;
 
-if crop_value > 10
+if crop_value > 10 {
     print "good crop";
-else
+} else {
     print "weak crop";
-end;
+}
 
 let mana = 3;
 
-if mana >= 5
+if mana >= 5 {
     print "cast spell";
-else
+} else {
     print "not enough mana";
-end;
+}
 

@@ -16,6 +16,97 @@ function Normalize-Newlines([string]$Text) {
 
 $Tests = @(
     @{
+        Name = "brace tokens"
+        Arguments = "--tokens tests/cases/brace_tokens.nt"
+        ExitCode = 0
+        Stdout = "1:1 FN fn`n1:4 IDENT empty`n1:9 LEFT_PAREN (`n1:10 RIGHT_PAREN )`n1:12 LEFT_BRACE {`n1:13 RIGHT_BRACE }`n1:14 EOF`n"
+        Stderr = ""
+    },
+    @{
+        Name = "brace_empty"
+        Arguments = "tests/cases/brace_empty.nt"
+        ExitCode = 0
+        Stdout = "0`n"
+        Stderr = ""
+    },
+    @{
+        Name = "brace_newline"
+        Arguments = "tests/cases/brace_newline.nt"
+        ExitCode = 0
+        Stdout = "10`n20`n30`n"
+        Stderr = ""
+    },
+    @{
+        Name = "brace_nested_else"
+        Arguments = "tests/cases/brace_nested_else.nt"
+        ExitCode = 0
+        Stdout = "1`n3`n"
+        Stderr = ""
+    },
+    @{
+        Name = "brace_comments"
+        Arguments = "tests/cases/brace_comments.nt"
+        ExitCode = 0
+        Stdout = "{ } {{ }} end`n"
+        Stderr = ""
+    },
+    @{
+        Name = "brace_end_identifier"
+        Arguments = "tests/cases/brace_end_identifier.nt"
+        ExitCode = 0
+        Stdout = "4`n"
+        Stderr = ""
+    },
+    @{
+        Name = "bad_brace_open"
+        Arguments = "tests/cases/bad_brace_open.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_open.nt:2:1: parse error: expected '{' to open block`n"
+    },
+    @{
+        Name = "bad_brace_close"
+        Arguments = "tests/cases/bad_brace_close.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_close.nt:2:1: parse error: expected '}' after function declaration`n"
+    },
+    @{
+        Name = "bad_brace_old_end"
+        Arguments = "tests/cases/bad_brace_old_end.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_old_end.nt:2:4: parse error: expected '=' after assignment name`n"
+    },
+    @{
+        Name = "bad_brace_double"
+        Arguments = "tests/cases/bad_brace_double.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_double.nt:1:13: parse error: expected statement`n"
+    },
+    @{
+        Name = "bad_brace_extra"
+        Arguments = "tests/cases/bad_brace_extra.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_extra.nt:1:1: parse error: expected statement`n"
+    },
+    @{
+        Name = "bad_brace_if_close"
+        Arguments = "tests/cases/bad_brace_if_close.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_if_close.nt:1:19: parse error: expected '}' after if branch`n"
+    },
+    @{
+        Name = "bad_brace_else_close"
+        Arguments = "tests/cases/bad_brace_else_close.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/bad_brace_else_close.nt:1:19: parse error: expected '}' after else branch`n"
+    },
+    @{
         Name = "semicolon_inline"
         Arguments = "tests/cases/semicolon_inline.nt"
         ExitCode = 0
@@ -72,11 +163,11 @@ $Tests = @(
         Stderr = "tests/cases/bad_missing_semicolon_eof.nt:1:9: parse error: expected ';' after statement`n"
     },
     @{
-        Name = "bad_missing_end_semicolon"
-        Arguments = "tests/cases/bad_missing_end_semicolon.nt"
-        ExitCode = 1
-        Stdout = ""
-        Stderr = "tests/cases/bad_missing_end_semicolon.nt:3:4: parse error: expected ';' after statement`n"
+        Name = "brace closer needs no semicolon"
+        Arguments = "tests/cases/brace_closer_no_semicolon.nt"
+        ExitCode = 0
+        Stdout = "1`n"
+        Stderr = ""
     },
     @{
         Name = "bad_missing_body_semicolon"

@@ -79,7 +79,10 @@ git diff --check
 
 The focused suite currently checks:
 
-- required semicolons at newlines, end of file, and block closers;
+- brace tokens, nested and empty blocks, either brace placement, and `else if`/`else`;
+- missing/extra braces, rejection of old `end` closers, and rejection of unimplemented assembly blocks;
+
+- required semicolons at newlines and end of file, with no semicolon required after closing braces;
 - multiple statements per line and inline blocks;
 - standalone and trailing `;#` comments, CRLF, and token columns;
 - comment markers inside strings and rejection of old `#` comments;

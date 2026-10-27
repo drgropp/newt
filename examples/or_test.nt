@@ -1,14 +1,14 @@
 let hungry = true;
 let tired = false;
 
-if hungry || tired
+if hungry || tired {
     print "needs care";
-end;
+}
 
 let hp = 10;
 let food = 0;
 
-if hp <= 0 || food <= 0
+if hp <= 0 || food <= 0 {
     print "danger";
-end;
+}
 

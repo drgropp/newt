@@ -1,14 +1,14 @@
 mut counter = 0;
 let label = "count";
 
-fn bump()
+fn bump() {
     counter = counter + 1;
     print label + ": " + text(counter);
-end;
+}
 
-fn area(r)
+fn area(r) {
     return pi * r * r;
-end;
+}
 
 bump();
 bump();

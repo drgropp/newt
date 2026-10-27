@@ -1,0 +1,5 @@
+fn empty() {}
+if false {} else {}
+while false {}
+for item in [] {}
+print empty();

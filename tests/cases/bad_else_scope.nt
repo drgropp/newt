@@ -1,8 +1,8 @@
-if false
+if false {
     print "unreachable";
-else
+} else {
     let hidden = 13;
     print hidden;
-end;
+}
 print hidden;
 

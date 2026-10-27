@@ -13,9 +13,9 @@ print round(-2.5);
 print pi;
 print e;
 
-if true
+if true {
     let pi = 3;
     print pi;
-end;
+}
 
 print pi;

@@ -124,9 +124,6 @@ static TokenType keyword_type(Token token) {
     if (token_text_equals(token, "else")) {
         return TOKEN_ELSE;
     }
-    if (token_text_equals(token, "end")) {
-        return TOKEN_END;
-    }
     if (token_text_equals(token, "while")) {
         return TOKEN_WHILE;
     }
@@ -338,6 +335,10 @@ Token next_token(Lexer *lexer) {
             return make_token(lexer, lexer_match(lexer, '=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
         case '>':
             return make_token(lexer, lexer_match(lexer, '=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
+        case '{':
+            return make_token(lexer, TOKEN_LEFT_BRACE);
+        case '}':
+            return make_token(lexer, TOKEN_RIGHT_BRACE);
         case '(':
             return make_token(lexer, TOKEN_LEFT_PAREN);
         case ')':
@@ -387,8 +388,6 @@ static const char *token_type_name(TokenType type) {
             return "IF";
         case TOKEN_ELSE:
             return "ELSE";
-        case TOKEN_END:
-            return "END";
         case TOKEN_WHILE:
             return "WHILE";
         case TOKEN_FOR:
@@ -433,6 +432,10 @@ static const char *token_type_name(TokenType type) {
             return "GREATER";
         case TOKEN_GREATER_EQUAL:
             return "GREATER_EQUAL";
+        case TOKEN_LEFT_BRACE:
+            return "LEFT_BRACE";
+        case TOKEN_RIGHT_BRACE:
+            return "RIGHT_BRACE";
         case TOKEN_LEFT_PAREN:
             return "LEFT_PAREN";
         case TOKEN_RIGHT_PAREN:

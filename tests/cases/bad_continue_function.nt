@@ -1,8 +1,8 @@
-fn skip()
+fn skip() {
     continue;
-end;
+}
 
-while true
+while true {
     skip();
-end;
+}
 

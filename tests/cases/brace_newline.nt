@@ -1,0 +1,16 @@
+fn choose(x)
+{
+if x == 1
+{
+return 10;
+}
+else if x == 2
+{
+return 20;
+}
+else
+{
+return 30;
+}
+}
+print choose(1); print choose(2); print choose(3);

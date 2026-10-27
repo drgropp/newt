@@ -1,14 +1,14 @@
 let name = "global";
 
-fn show(name)
+fn show(name) {
     print name;
-end;
+}
 
-fn outer()
+fn outer() {
     let name = "outer local";
     show("parameter");
     print name;
-end;
+}
 
 outer();
 print name;

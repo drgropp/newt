@@ -3,35 +3,35 @@
 ;# Middle branch
 let crop = 2;
 
-if crop == 1
+if crop == 1 {
     print "carrot";
-else if crop == 2
+} else if crop == 2 {
     print "strawberry";
-else if crop == 3
+} else if crop == 3 {
     print "glowcap";
-else
+} else {
     print "unknown crop";
-end;
+}
 
 ;# First branch
 let first_crop = 1;
 
-if first_crop == 1
+if first_crop == 1 {
     print "carrot";
-else if first_crop == 2
+} else if first_crop == 2 {
     print "strawberry";
-else
+} else {
     print "unknown crop";
-end;
+}
 
 ;# Else fallback
 let mystery_crop = 9;
 
-if mystery_crop == 1
+if mystery_crop == 1 {
     print "carrot";
-else if mystery_crop == 2
+} else if mystery_crop == 2 {
     print "strawberry";
-else
+} else {
     print "unknown crop";
-end;
+}
 
