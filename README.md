@@ -1,8 +1,35 @@
 # Newt
 
-Newt is a small experimental scripting language implemented in C. It is designed to be readable, direct, and easy to learn, with semicolon-terminated statements and blocks closed with `end;`.
+Newt 0.001 is an experimental systems-language project implemented in C. It is a long-term learning project for OS development, CLI/TUI tools, and mathematics, mainly inspired by C, assembly, and Rust, with selected ideas from Zig and Go.
 
-This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as additional collection operations, imports, modules, HTTP, and JSON are intentionally left for later.
+The current implementation is a tree-walking interpreter. It uses `let` and `mut`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. It executes top-level statements; no special entry function is implemented yet.
+
+## Direction and current milestone
+
+The goal is predictable native code, explicit memory control, and interoperability with C, Rust, and assembly. Current strings and lists are reference counted, and all numbers are stored as C `double`; these interpreter behaviors are not the final systems memory and numeric models.
+
+Changes are intentionally small and independently testable:
+
+1. **Implemented:** brace blocks replace `end`, retaining lexical scope and current execution behavior.
+2. **Planned:** typed `let`/`mut` declarations and typed function signatures.
+3. **Planned:** distinct `int`, `float`, and `double` storage and arithmetic, with documented target sizes and conversion rules.
+4. **Planned:** `start:` and defined entry-function and return behavior.
+5. **Planned:** a minimal compiler that emits assembly for one initial target.
+6. **Planned:** pointers, fixed-layout data, external calls, and target-specific assembly in `{{ }}` blocks with explicit inputs, outputs, and clobbers.
+
+Type annotations, C-style function signatures, `void`, `start:`, pointers, and assembly blocks are **not supported yet**. Ordinary functions still use `fn`. Direct execution from an OS terminal is a long-term goal, not a current feature. Advanced collections, modules, networking, and other optional features remain outside this milestone.
+
+A complete program using the syntax implemented today:
+
+```newt
+fn greet() {
+    print "hello world";
+}
+
+greet();
+```
+
+Simple statements need `;`, including the final statement in a file. A closing `}` needs no semicolon. Opening braces may be on the header line or the following line. `;#` begins a line comment; braces and comment markers inside strings remain text. Existing `end`-based programs must be migrated. Double braces are reserved for future assembly design and are not executable assembly today.
 
 ## Build
 
@@ -29,7 +56,7 @@ Check the version:
 Expected output:
 
 ```txt
-newt 0.1.0
+newt 0.001
 ```
 
 ## Run a file
@@ -138,9 +165,9 @@ Newt currently supports:
 - boolean `||`
 - boolean `!`
 - unary minus and negative numbers
-- `if / else if / else / end` conditions
-- `while / end` loops
-- `for name in list / end` loops
+- `if / else if / else` conditions with brace blocks
+- `while` loops with brace blocks
+- `for name in list` loops with brace blocks
 - `break` to exit the nearest enclosing loop
 - `continue` to begin the next iteration of the nearest enclosing loop
 - user-defined functions with parameters and return values
@@ -177,11 +204,11 @@ let hp = 10;
 let food = 5;
 let message = "Player: " + player;
 
-if hp > 0 && food > 0
+if hp > 0 && food > 0 {
     print message;
-else
+} else {
     print "needs help";
-end;
+}
 ```
 
 String literals decode `\n` as newline, `\t` as tab, `\r` as carriage return, `\\` as one backslash, and `\"` as one double quote:
@@ -200,9 +227,9 @@ Boolean `||`, boolean `!`, and negative numbers:
 let tired = false;
 let hungry = true;
 
-if hungry || ! tired
+if hungry || ! tired {
     print "needs care";
-end;
+}
 
 let change = -(2 + 3);
 print change;
@@ -213,13 +240,13 @@ Multiple conditional branches with `else if`:
 ```newt
 let crop = 2;
 
-if crop == 1
+if crop == 1 {
     print "carrot";
-else if crop == 2
+} else if crop == 2 {
     print "strawberry";
-else
+} else {
     print "unknown crop";
-end;
+}
 ```
 
 Loops:
@@ -227,13 +254,13 @@ Loops:
 ```newt
 mut count = 1;
 
-while count <= 3
+while count <= 3 {
     print count;
-    if count == 2
+    if count == 2 {
         break;
-    end;
+    }
     count = count + 1;
-end;
+}
 ```
 
 The condition is evaluated before every iteration. If it is initially false, the loop body does not run.
@@ -253,9 +280,9 @@ append(names, "river");
 print names[0];
 print length(names);
 
-for name in names
+for name in names {
     print name;
-end;
+}
 ```
 
 List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `let` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
@@ -272,9 +299,9 @@ print sqrt(area);
 Functions with parameters and return values:
 
 ```newt
-fn add(a, b)
+fn add(a, b) {
     return a + b;
-end;
+}
 
 let result = add(2, 3);
 print result;

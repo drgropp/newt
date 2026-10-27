@@ -1,0 +1,2 @@
+if true { if false { print 0; } else { print 1; } } else { print 2; }
+print 3;

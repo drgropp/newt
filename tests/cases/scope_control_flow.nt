@@ -1,29 +1,29 @@
 mut count = 0;
 
-while count < 5
+while count < 5 {
     count = count + 1;
     let iteration = count;
 
-    if count == 2
+    if count == 2 {
         let skipped = 200;
         continue;
-    end;
+    }
 
     print iteration;
-    if count == 3
+    if count == 3 {
         let stopped = 300;
         break;
-    end;
-end;
+    }
+}
 
 print count;
 
-fn early_return()
-    if true
+fn early_return() {
+    if true {
         let answer = 7;
         return answer;
-    end;
+    }
     return 0;
-end;
+}
 
 print early_return();

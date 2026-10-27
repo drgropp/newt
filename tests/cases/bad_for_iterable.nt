@@ -1,4 +1,4 @@
-for item in 42
+for item in 42 {
     print item;
-end;
+}
 

@@ -1,6 +1,6 @@
 # Newt language guide
 
-Newt is a small scripting language with semicolon-terminated statements and blocks closed by `end;`. Simple statements require `;`, even at the end of a file. Block headers end with a newline or `;`.
+Newt is an experimental systems-language project currently implemented as an interpreter. Simple statements require `;`, even at the end of a file. Blocks use `{ }`; the opening brace may be on the header line or the following line. A closing `}` needs no semicolon.
 
 ## Variables
 
@@ -26,32 +26,32 @@ print age;
 
 ## Conditions
 
-Use `if`, optional `else if` and `else` branches, and `end` to choose which statements run. Newt runs only the first matching branch.
+Use `if` with optional `else if` and `else` branches, each with a `{ }` body, to choose which statements run. Newt runs only the first matching branch.
 
 ```newt
-if age >= 18
+if age >= 18 {
     print "adult";
-else if age >= 13
+} else if age >= 13 {
     print "teen";
-else
+} else {
     print "child";
-end;
+}
 ```
 
 ## Loops
 
-Use `while` and `end` to repeat statements while a condition is true.
+Use `while` with a `{ }` body to repeat statements while a condition is true.
 
 ```newt
 mut count = 1;
 
-while count <= 3
+while count <= 3 {
     print count;
-    if count == 2
+    if count == 2 {
         break;
-    end;
+    }
     count = count + 1;
-end;
+}
 ```
 
 Use `for ... in` to visit every element of a list from first to last. Use a `mut` binding for a list that needs to change:
@@ -65,9 +65,9 @@ append(names, "river");
 print names[0];
 print length(names);
 
-for name in names
+for name in names {
     print name;
-end;
+}
 ```
 
 Indexes start at zero, so `names[0]` is the first element. Assigning to an existing index replaces that element, and `append(names, value)` adds one element at the end. Both operations require a `mut` binding; mutation through `let` is a runtime error. `length(names)` returns the number of elements. Nested indexing and indexed assignment such as `rows[1][0]` are also supported. Indexes must be whole numbers within the list's bounds, and only lists can be indexed or passed to `length`.
@@ -88,9 +88,9 @@ Boolean values are `true` and `false`. Conditions can use `&&`, `||`, and `!`.
 let hungry = true;
 let sleeping = false;
 
-if hungry && ! sleeping
+if hungry && ! sleeping {
     print "snack time";
-end;
+}
 ```
 
 ## Strings and escapes
@@ -151,12 +151,12 @@ print round(2.5);
 
 ## Functions
 
-Declare a function with `fn`, a name, optional parameter names, and `end`. Pass argument values in the function call. Use `return` to stop the function and send a value back.
+Declare a function with `fn`, a name, optional parameter names, and a `{ }` body. Pass argument values in the function call. Use `return` to stop the function and send a value back.
 
 ```newt
-fn add(a, b)
+fn add(a, b) {
     return a + b;
-end;
+}
 
 print add(2, 3);
 ```

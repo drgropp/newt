@@ -1,10 +1,10 @@
 ;# Newt development log
 
-if arg_count() == 0
+if arg_count() == 0 {
   print "Usage: newt examples/devlog.nt \"message\"";
-else
+} else {
    let message = arg(0);
    file_append("examples/devlog.md", message + ""\n")
    print "Dev log saved.";
-end;
+}
 

@@ -1,14 +1,14 @@
 let sleeping = false;
 
-if ! sleeping
+if ! sleeping {
     print "awake";
-end;
+}
 
 let ready = true;
 
-if ! ready
+if ! ready {
     print "not ready";
-else
+} else {
     print "ready";
-end;
+}
 

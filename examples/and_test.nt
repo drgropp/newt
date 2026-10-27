@@ -3,16 +3,16 @@
 let a = true;
 let b = true;
 
-if a && b
+if a && b {
     print "both";
-end;
+}
 
 let hp = 10;
 let food = 5;
 
-if hp > 0 && food > 0
+if hp > 0 && food > 0 {
     print "alive";
-end;
+}
 
 let has_key = true;
 let door_locked = false;

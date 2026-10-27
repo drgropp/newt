@@ -21,13 +21,13 @@ print "t=0 s  x=0 m  y=0 m";
 time = time + time_step;
 vertical_position = vertical_speed * time - 0.5 * gravity * time * time;
 
-while vertical_position > 0
+while vertical_position > 0 {
     horizontal_position = horizontal_speed * time;
     print "t=" + text(time) + " s  x=" + text(horizontal_position) + " m  y=" + text(vertical_position) + " m";
 
     time = time + time_step;
     vertical_position = vertical_speed * time - 0.5 * gravity * time * time;
-end;
+}
 
 let flight_time = 2 * vertical_speed / gravity;
 let landing_distance = horizontal_speed * flight_time;

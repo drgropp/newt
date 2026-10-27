@@ -1,9 +1,9 @@
-fn peek()
+fn peek() {
     print hidden;
-end;
+}
 
-if true
+if true {
     let hidden = 1;
     peek();
-end;
+}
 

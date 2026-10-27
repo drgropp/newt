@@ -1,6 +1,6 @@
 /*
 Newt
-A small experimental scripting language built in C.
+An experimental systems-language project, currently interpreted in C.
 Created by drgropp.
 */
 
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "--about") == 0) {
-        printf("Newt is a small experimental scripting language built in C.\n");
+        printf("Newt is an experimental systems-language project, currently interpreted in C.\n");
         printf("Created by drgropp.\n");
         return 0;
     }
@@ -152,3 +152,4 @@ int main(int argc, char **argv) {
 
     return success ? 0 : 1;
 }
+

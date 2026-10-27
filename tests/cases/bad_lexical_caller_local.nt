@@ -1,11 +1,11 @@
-fn peek()
+fn peek() {
     print secret;
-end;
+}
 
-fn caller()
+fn caller() {
     let secret = "caller's local";
     peek();
-end;
+}
 
 caller();
 

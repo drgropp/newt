@@ -3,8 +3,8 @@
 let name = "newt";
 mut hp = 100;
 
-if hp >= 50
+if hp >= 50 {
     print name;
-else
+} else {
     print "low hp";
-end;
+}

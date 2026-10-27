@@ -10,4 +10,4 @@ Makefile text eol=lf
 
 
 # Preserve the deliberate CRLF lexer fixture on every platform.
-tests/cases/semicolon_crlf.nt -text
+tests/cases/semicolon_crlf.nt -text whitespace=cr-at-eol

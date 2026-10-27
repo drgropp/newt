@@ -757,21 +757,26 @@ static void print_expression_tree(Parser *parser, Expr *expr, int indent) {
     }
 }
 
-/* Simple statements and block closers require an explicit terminator. */
+/* Simple statements require an explicit terminator; braces close blocks. */
 static void parser_consume_statement_end(Parser *parser) {
     parser_consume(parser, TOKEN_SEMICOLON, "expected ';' after statement");
     parser_skip_separators(parser);
 }
 
-/* Block headers retain their line break; a semicolon also permits inline blocks. */
-static void parser_consume_block_header_end(Parser *parser) {
-    if (parser->current.type == TOKEN_NEWLINE ||
-        parser->current.type == TOKEN_SEMICOLON) {
+/* Permit either brace placement without making semicolons optional. */
+static void parser_skip_newlines(Parser *parser) {
+    while (!parser->had_error &&
+           (parser->current.type == TOKEN_NEWLINE ||
+            (parser->current.type == TOKEN_SEMICOLON &&
+             parser->current.start[1] == '#'))) {
         parser_advance(parser);
-        parser_skip_separators(parser);
-        return;
     }
-    parser_error(parser, parser->current, "expected newline or ';' after block header");
+}
+
+static void parser_consume_block_open(Parser *parser) {
+    parser_skip_newlines(parser);
+    parser_consume(parser, TOKEN_LEFT_BRACE, "expected '{' to open block");
+    parser_skip_separators(parser);
 }
 
 static Stmt *parse_declaration(Parser *parser, StmtKind kind, const char *keyword) {
@@ -1058,22 +1063,17 @@ static Stmt *parse_function_declaration(Parser *parser) {
         return NULL;
     }
 
-    parser_consume_block_header_end(parser);
+    parser_consume_block_open(parser);
     if (parser->had_error) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_END, TOKEN_END, &body_start, &body_count);
+    parse_block(parser, TOKEN_RIGHT_BRACE, TOKEN_RIGHT_BRACE, &body_start, &body_count);
     if (parser->had_error) {
         return NULL;
     }
 
-    parser_consume(parser, TOKEN_END, "expected 'end' after function declaration");
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    parser_consume_statement_end(parser);
+    parser_consume(parser, TOKEN_RIGHT_BRACE, "expected '}' after function declaration");
     if (parser->had_error) {
         return NULL;
     }
@@ -1090,7 +1090,7 @@ static Stmt *parse_function_declaration(Parser *parser) {
     return stmt;
 }
 
-static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
+static Stmt *parse_if_branch(Parser *parser, Token if_token) {
     Expr *condition;
     Stmt *stmt;
     int then_start;
@@ -1099,73 +1099,47 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
     int else_count = 0;
     int has_else = 0;
 
-    if (parser->current.type == TOKEN_SEMICOLON ||
-        parser->current.type == TOKEN_NEWLINE ||
-        parser->current.type == TOKEN_EOF ||
-        parser->current.type == TOKEN_ELSE ||
-        parser->current.type == TOKEN_END) {
-        parser_error(parser,
-                     parser->current,
-                     consumes_end ? "expected condition after 'if'"
-                                  : "expected condition after 'else if'");
-        return NULL;
-    }
-
     condition = parse_expression(parser);
+    if (condition == NULL || parser->had_error) {
+        return NULL;
+    }
+    parser_consume_block_open(parser);
+    if (parser->had_error) {
+        return NULL;
+    }
+    parse_block(parser, TOKEN_RIGHT_BRACE, TOKEN_RIGHT_BRACE, &then_start, &then_count);
+    parser_consume(parser, TOKEN_RIGHT_BRACE, "expected '}' after if branch");
     if (parser->had_error) {
         return NULL;
     }
 
-    parser_consume_block_header_end(parser);
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    parse_block(parser, TOKEN_ELSE, TOKEN_END, &then_start, &then_count);
-    if (parser->had_error) {
-        return NULL;
-    }
-
+    parser_skip_separators(parser);
     if (parser_match(parser, TOKEN_ELSE)) {
         has_else = 1;
+        parser_skip_separators(parser);
         if (parser_match(parser, TOKEN_IF)) {
-            Stmt *else_if_stmt = parse_if_branch(parser, parser->previous, 0);
+            Stmt *else_if_stmt = parse_if_branch(parser, parser->previous);
+            int else_if_index;
 
             if (else_if_stmt == NULL) {
                 return NULL;
             }
-
-            {
-                int else_if_index = statement_index(parser, else_if_stmt);
-
-                else_start = store_block(parser, &else_if_index, 1, if_token);
-                if (else_start < 0) {
-                    return NULL;
-                }
+            else_if_index = statement_index(parser, else_if_stmt);
+            else_start = store_block(parser, &else_if_index, 1, if_token);
+            if (else_start < 0) {
+                return NULL;
             }
             else_count = 1;
         } else {
-            parser_consume_block_header_end(parser);
+            parser_consume_block_open(parser);
             if (parser->had_error) {
                 return NULL;
             }
-
-            parse_block(parser, TOKEN_END, TOKEN_END, &else_start, &else_count);
+            parse_block(parser, TOKEN_RIGHT_BRACE, TOKEN_RIGHT_BRACE, &else_start, &else_count);
+            parser_consume(parser, TOKEN_RIGHT_BRACE, "expected '}' after else branch");
             if (parser->had_error) {
                 return NULL;
             }
-        }
-    }
-
-    if (consumes_end) {
-        parser_consume(parser, TOKEN_END, "expected 'end' after if statement");
-        if (parser->had_error) {
-            return NULL;
-        }
-
-        parser_consume_statement_end(parser);
-        if (parser->had_error) {
-            return NULL;
         }
     }
 
@@ -1173,7 +1147,6 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
     if (stmt == NULL) {
         return NULL;
     }
-
     stmt->then_start = then_start;
     stmt->then_count = then_count;
     stmt->else_start = else_start;
@@ -1183,7 +1156,7 @@ static Stmt *parse_if_branch(Parser *parser, Token if_token, int consumes_end) {
 }
 
 static Stmt *parse_if_statement(Parser *parser) {
-    return parse_if_branch(parser, parser->previous, 1);
+    return parse_if_branch(parser, parser->previous);
 }
 
 static Stmt *parse_while_statement(Parser *parser) {
@@ -1198,22 +1171,17 @@ static Stmt *parse_while_statement(Parser *parser) {
         return NULL;
     }
 
-    parser_consume_block_header_end(parser);
+    parser_consume_block_open(parser);
     if (parser->had_error) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_END, TOKEN_END, &body_start, &body_count);
+    parse_block(parser, TOKEN_RIGHT_BRACE, TOKEN_RIGHT_BRACE, &body_start, &body_count);
     if (parser->had_error) {
         return NULL;
     }
 
-    parser_consume(parser, TOKEN_END, "expected 'end' after while statement");
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    parser_consume_statement_end(parser);
+    parser_consume(parser, TOKEN_RIGHT_BRACE, "expected '}' after while statement");
     if (parser->had_error) {
         return NULL;
     }
@@ -1249,7 +1217,7 @@ static Stmt *parse_for_statement(Parser *parser) {
     if (parser->current.type == TOKEN_SEMICOLON ||
         parser->current.type == TOKEN_NEWLINE ||
         parser->current.type == TOKEN_EOF ||
-        parser->current.type == TOKEN_END) {
+        parser->current.type == TOKEN_RIGHT_BRACE) {
         parser_error(parser, parser->current, "expected iterable expression after 'in'");
         return NULL;
     }
@@ -1258,22 +1226,17 @@ static Stmt *parse_for_statement(Parser *parser) {
         return NULL;
     }
 
-    parser_consume_block_header_end(parser);
+    parser_consume_block_open(parser);
     if (parser->had_error) {
         return NULL;
     }
 
-    parse_block(parser, TOKEN_END, TOKEN_END, &body_start, &body_count);
+    parse_block(parser, TOKEN_RIGHT_BRACE, TOKEN_RIGHT_BRACE, &body_start, &body_count);
     if (parser->had_error) {
         return NULL;
     }
 
-    parser_consume(parser, TOKEN_END, "expected 'end' after for statement");
-    if (parser->had_error) {
-        return NULL;
-    }
-
-    parser_consume_statement_end(parser);
+    parser_consume(parser, TOKEN_RIGHT_BRACE, "expected '}' after for statement");
     if (parser->had_error) {
         return NULL;
     }

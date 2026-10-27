@@ -1,10 +1,10 @@
 # Newt language specification (preview)
 
-This document describes the language implemented by Newt 0.1.0. It is a snapshot of current behavior for the preview release, not a promise that future versions will remain source-compatible.
+This document describes the language implemented by Newt 0.001. It is a snapshot of current behavior for the preview release, not a promise that future versions will remain source-compatible.
 
 ## Source files and execution
 
-Newt source files conventionally use the `.nt` extension. Simple statements and block-closing `end` require `;`. Block headers end with a newline or `;`. Blank lines are allowed, and `;#` starts a comment that continues to the end of the line.
+Newt source files conventionally use the `.nt` extension. Simple statements require `;`. Functions, conditionals, and loops use `{ }` blocks. An opening brace may appear on the header line or after newlines. Closing braces do not require semicolons. The old `end` keyword is no longer supported as a block closer. Blank lines are allowed, and `;#` starts a comment that continues to the end of the line.
 
 Run a source file directly or with `--run`:
 
@@ -115,37 +115,37 @@ Indexed assignment uses the same target, integer, and bounds validation as index
 
 ## Conditional execution
 
-An `if` block may contain any number of `else if` branches and an optional final `else`. The first truthy branch runs. `end` closes the complete conditional.
+An `if` block may contain any number of `else if` branches and an optional final `else`. The first truthy branch runs. Each branch has its own `{ }` block; `else if` and `else` follow the preceding closing brace, on the same or a later line.
 
 ```newt
-if temperature < 0
+if temperature < 0 {
     print "freezing";
-else if temperature < 20
+} else if temperature < 20 {
     print "cool";
-else
+} else {
     print "warm";
-end;
+}
 ```
 
 ## Loops
 
-`while` repeats its body while its condition is truthy. `end` closes the loop.
+`while` repeats its body while its condition is truthy. `{ }` encloses the loop body.
 
 ```newt
 mut count = 0;
-while count < 3
+while count < 3 {
     print count;
     count = count + 1;
-end;
+}
 ```
 
 `for` evaluates its iterable expression once, requires the result to be a list, captures its starting length, and executes its body once for each of those elements from first to last. Mutations completed before the loop are visible. Appending during the loop does not extend the current loop. An empty list executes the body zero times. A non-list result is a runtime error.
 
 ```newt
 let names = ["newt", "ghostnote", "stray signal"];
-for name in names
+for name in names {
     print name;
-end;
+}
 ```
 
 The loop variable is an immutable, iteration-local binding containing the current element. It may shadow a variable in an outer scope. The binding and any other variables declared during that iteration are discarded before the next iteration and are not visible after the loop.
@@ -160,12 +160,12 @@ A single loop execution is limited to 100,000 iterations and reports a runtime e
 
 ## Functions and return
 
-Declare a function with `fn`, a name, a parenthesized parameter list, a body, and `end`.
+Declare a function with `fn`, a name, a parenthesized parameter list, and a body enclosed in `{ }`.
 
 ```newt
-fn add(a, b)
+fn add(a, b) {
     return a + b;
-end;
+}
 
 print add(2, 3);
 ```
@@ -252,7 +252,7 @@ Strings and lists created while a program runs are reference counted and freed a
 
 ## Known limitations and non-features
 
-Newt is a small tree-walk interpreter intended for beginner-sized local scripts. The preview release does not include:
+Newt is an experimental systems-language project currently implemented as a tree-walk interpreter. The preview release does not include:
 
 - a `none` value;
 - list operations other than indexed assignment and `append`, and collection types other than lists;

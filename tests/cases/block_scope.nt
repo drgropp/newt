@@ -1,28 +1,28 @@
 let x = 10;
 
-if true
+if true {
     let x = 20;
     print x;
 
-    if true
+    if true {
         let x = 30;
         print x;
-    end;
+    }
 
     print x;
-end;
+}
 
 print x;
 
 mut changed = 0;
-if true
+if true {
     changed = 5;
-end;
+}
 print changed;
 
-if false
+if false {
     print "unreachable";
-else
+} else {
     let branch_value = 40;
     print branch_value;
-end;
+}

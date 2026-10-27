@@ -1,13 +1,13 @@
 ;# Function test
 
-fn greet()
+fn greet() {
     print "hello from function";
-end;
+}
 
-fn farm()
+fn farm() {
     print "plant carrot";
     print "water crop";
-end;
+}
 
 greet();
 farm();

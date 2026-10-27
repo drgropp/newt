@@ -1,10 +1,10 @@
 mut number = 0;
 
-while number < 6
+while number < 6 {
     number = number + 1;
-    if number == 3
+    if number == 3 {
         continue;
-    end;
+    }
     print number;
-end;
+}
 
