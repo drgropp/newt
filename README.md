@@ -1,6 +1,6 @@
 # Newt
 
-Newt is a small experimental scripting language implemented in C. It is designed to be readable, direct, and easy to learn, with simple statements and `end`-delimited blocks.
+Newt is a small experimental scripting language implemented in C. It is designed to be readable, direct, and easy to learn, with semicolon-terminated statements and blocks closed with `end;`.
 
 This repository is a small v1 checkpoint: the core language can run useful beginner-sized scripts, while larger features such as additional collection operations, imports, modules, HTTP, and JSON are intentionally left for later.
 
@@ -125,7 +125,7 @@ Newt currently supports:
 - mutable-list indexed assignment with `items[index] = value`
 - list growth with `append(list, value)`
 - list size with `length(list)`
-- immutable `val` variables
+- immutable `let` variables
 - mutable `mut` variables and assignment
 - `print`
 - numeric input with `input_number("prompt")`
@@ -134,9 +134,9 @@ Newt currently supports:
 - string escapes `\n`, `\t`, `\r`, `\\`, and `\"`
 - string helpers with `len`, `contains`, `upper`, `lower`, and `trim`
 - comparisons with `==`, `!=`, `<`, `<=`, `>`, and `>=`
-- boolean `and`
-- boolean `or`
-- boolean `not`
+- boolean `&&`
+- boolean `||`
+- boolean `!`
 - unary minus and negative numbers
 - `if / else if / else / end` conditions
 - `while / end` loops
@@ -151,7 +151,7 @@ Newt currently supports:
 - explicit conversion with `text(value)` for numbers, booleans, and strings
 - local file I/O with `file_read`, `file_write`, and `file_append`
 - script arguments with `arg_count()` and `arg(index)`
-- line comments beginning with `#`
+- line comments beginning with `;#`
 
 ## Language examples
 
@@ -160,80 +160,80 @@ See [docs/language.md](docs/language.md) for a short language guide.
 Values and arithmetic:
 
 ```newt
-val width = 8
-val height = 4
-print width * height
+let width = 8;
+let height = 4;
+print width * height;
 
-mut score = 10
-score = score + 5
-print score
+mut score = 10;
+score = score + 5;
+print score;
 ```
 
 Strings, booleans, and comparisons:
 
 ```newt
-val player = "Ada"
-val hp = 10
-val food = 5
-val message = "Player: " + player
+let player = "Ada";
+let hp = 10;
+let food = 5;
+let message = "Player: " + player;
 
-if hp > 0 and food > 0
-    print message
+if hp > 0 && food > 0
+    print message;
 else
-    print "needs help"
-end
+    print "needs help";
+end;
 ```
 
 String literals decode `\n` as newline, `\t` as tab, `\r` as carriage return, `\\` as one backslash, and `\"` as one double quote:
 
 ```newt
-print "Name:\tNewt\nStatus:\tready"
-print "She said \"hello\"."
-print "C:\\notes"
+print "Name:\tNewt\nStatus:\tready";
+print "She said \"hello\".";
+print "C:\\notes";
 ```
 
 Any other backslash sequence is a lexer error. A backslash at the end of an unterminated string is reported as an incomplete escape sequence, with the diagnostic located at that backslash.
 
-Boolean `or`, boolean `not`, and negative numbers:
+Boolean `||`, boolean `!`, and negative numbers:
 
 ```newt
-val tired = false
-val hungry = true
+let tired = false;
+let hungry = true;
 
-if hungry or not tired
-    print "needs care"
-end
+if hungry || ! tired
+    print "needs care";
+end;
 
-val change = -(2 + 3)
-print change
+let change = -(2 + 3);
+print change;
 ```
 
 Multiple conditional branches with `else if`:
 
 ```newt
-val crop = 2
+let crop = 2;
 
 if crop == 1
-    print "carrot"
+    print "carrot";
 else if crop == 2
-    print "strawberry"
+    print "strawberry";
 else
-    print "unknown crop"
-end
+    print "unknown crop";
+end;
 ```
 
 Loops:
 
 ```newt
-mut count = 1
+mut count = 1;
 
 while count <= 3
-    print count
+    print count;
     if count == 2
-        break
-    end
-    count = count + 1
-end
+        break;
+    end;
+    count = count + 1;
+end;
 ```
 
 The condition is evaluated before every iteration. If it is initially false, the loop body does not run.
@@ -245,39 +245,39 @@ The condition is evaluated before every iteration. If it is initially false, the
 Use `for ... in` to visit list elements from first to last. Declare a list with `mut` when its elements or length need to change:
 
 ```newt
-mut names = ["newt", "ghostnote"]
+mut names = ["newt", "ghostnote"];
 
-names[1] = "moss"
-append(names, "river")
+names[1] = "moss";
+append(names, "river");
 
-print names[0]
-print length(names)
+print names[0];
+print length(names);
 
 for name in names
-    print name
-end
+    print name;
+end;
 ```
 
-List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `val` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
+List indexes are zero-based integers. Indexed assignment replaces an existing element and uses the same list, integer, and range validation as indexed reads. `append(names, value)` adds one element at the end and returns `true`. Both mutations require an access path rooted in a `mut` binding; attempting them through a `let` binding is a runtime error. `length(names)` returns the number of elements without changing the list.
 
 The iterable expression and its starting length are evaluated once before iteration starts. Mutations completed before the loop are visible; appending during a loop does not extend that loop. An empty list runs the body zero times. The loop variable is an immutable binding local to one iteration: it may shadow an outer variable, and it is discarded before the next iteration and after the loop. `break` and `continue` target the nearest enclosing `for` or `while`, including when the loop kinds are nested. A non-list iterable is a runtime error.
 
 Numeric input and square roots:
 
 ```newt
-val area = input_number("Area: ")
-print sqrt(area)
+let area = input_number("Area: ");
+print sqrt(area);
 ```
 
 Functions with parameters and return values:
 
 ```newt
 fn add(a, b)
-    return a + b
-end
+    return a + b;
+end;
 
-val result = add(2, 3)
-print result
+let result = add(2, 3);
+print result;
 ```
 
 Functions can also have no parameters, and a call may be used as a standalone statement when its return value is not needed. A function currently supports up to 16 parameters. Because Newt does not have a `none` value yet, a value-producing call to a function without an explicit `return` safely produces the number `0`.
@@ -285,8 +285,8 @@ Functions can also have no parameters, and a call may be used as a standalone st
 Convert an existing value to text explicitly when building a string:
 
 ```newt
-val score = 42
-print "Score: " + text(score)
+let score = 42;
+print "Score: " + text(score);
 ```
 
 Newt does not implicitly combine strings and numbers.
@@ -294,20 +294,20 @@ Newt does not implicitly combine strings and numbers.
 Clean and inspect command-line text with the string helpers:
 
 ```newt
-val command = trim("  Build Project  ")
-print upper(command)
-print len(command)
-print contains(lower(command), "build")
+let command = trim("  Build Project  ");
+print upper(command);
+print len(command);
+print contains(lower(command), "build");
 ```
 
 Basic file I/O:
 
 ```newt
-val note = file_read("notes.txt")
-print note
+let note = file_read("notes.txt");
+print note;
 
-file_write("notes.txt", "first line")
-file_append("notes.txt", "\nsecond line")
+file_write("notes.txt", "first line");
+file_append("notes.txt", "\nsecond line");
 ```
 
 `file_read` returns the complete file text. `file_write` overwrites a file and `file_append` adds to it; both return `true` after a successful write.
@@ -321,9 +321,9 @@ Command-line arguments:
 ```
 
 ```newt
-print arg_count()
-print arg(0)
-print arg(1)
+print arg_count();
+print arg(0);
+print arg(1);
 ```
 
 `arg_count()` returns the number of values after the script path. `arg(0)` returns the first value, and an invalid index produces a runtime error.
@@ -331,8 +331,8 @@ print arg(1)
 Generate a small Markdown development log:
 
 ```newt
-file_write("examples/devlog.md", "# Devlog\n\n")
-file_append("examples/devlog.md", "Today I worked on Newt.\n")
+file_write("examples/devlog.md", "# Devlog\n\n");
+file_append("examples/devlog.md", "Today I worked on Newt.\n");
 ```
 
 Additional list operations, imports/modules, HTTP, and JSON are not part of Newt yet.
@@ -356,8 +356,8 @@ Additional list operations, imports/modules, HTTP, and JSON are not part of Newt
 - `file_append_test.nt` demonstrates appending text to a file.
 - `sqrt_test.nt` demonstrates `sqrt` with a literal and a variable.
 - `and_test.nt` combines boolean values and numeric comparisons.
-- `or_test.nt` demonstrates `or` with boolean values and comparisons.
-- `not_test.nt` demonstrates negating boolean values with `not`.
+- `or_test.nt` demonstrates `||` with boolean values and comparisons.
+- `not_test.nt` demonstrates negating boolean values with `!`.
 - `unary_minus_test.nt` demonstrates negative numbers and negated expressions.
 - `bool_test.nt` demonstrates boolean values and conditional branches.
 - `while.nt` demonstrates condition-controlled repetition and mutable loop state.
@@ -407,3 +407,4 @@ Newt is experimental, and still in an early stage. Newt is currently being worke
 No license has been chosen yet.
 
 Copyright 2026 drgropp. All rights reserved.
+

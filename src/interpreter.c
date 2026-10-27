@@ -1325,7 +1325,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             }
             interpreter->is_continuing = 1;
             return 1;
-        case STMT_VAL_DECL:
+        case STMT_LET_DECL:
             if (!eval_expression(interpreter, stmt->expression, &value)) {
                 return 0;
             }
@@ -1342,7 +1342,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 return 0;
             }
             if (!variable->is_mutable) {
-                runtime_name_error(interpreter, stmt->name, "cannot assign to immutable val");
+                runtime_name_error(interpreter, stmt->name, "cannot assign to immutable variable");
                 return 0;
             }
             if (!eval_expression(interpreter, stmt->expression, &value)) {
@@ -1367,7 +1367,7 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
                 return 0;
             }
             if (!variable->is_mutable) {
-                runtime_name_error(interpreter, stmt->name, "cannot mutate immutable val");
+                runtime_name_error(interpreter, stmt->name, "cannot mutate immutable variable");
                 return 0;
             }
             if (!eval_expression(interpreter, target->left, &list)) {
@@ -1614,3 +1614,4 @@ int run_program(const char *path,
         return succeeded;
     }
 }
+

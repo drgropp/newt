@@ -106,8 +106,8 @@ int token_text_equals(Token token, const char *text) {
 }
 
 static TokenType keyword_type(Token token) {
-    if (token_text_equals(token, "val")) {
-        return TOKEN_VAL;
+    if (token_text_equals(token, "let")) {
+        return TOKEN_LET;
     }
     if (token_text_equals(token, "mut")) {
         return TOKEN_MUT;
@@ -276,11 +276,6 @@ Token next_token(Lexer *lexer) {
             continue;
         }
 
-        if (ch == '#') {
-            lexer_skip_comment(lexer);
-            continue;
-        }
-
         break;
     }
 
@@ -303,6 +298,15 @@ Token next_token(Lexer *lexer) {
     switch (ch) {
         case '\n':
             return make_token(lexer, TOKEN_NEWLINE);
+        case ';': {
+            Token terminator = make_token(lexer, TOKEN_SEMICOLON);
+
+            /* The semicolon still terminates code before a ;# comment. */
+            if (lexer_match(lexer, '#')) {
+                lexer_skip_comment(lexer);
+            }
+            return terminator;
+        }
         case '"':
             return lex_string(lexer);
         case '+':
@@ -357,6 +361,8 @@ static const char *token_type_name(TokenType type) {
     switch (type) {
         case TOKEN_EOF:
             return "EOF";
+        case TOKEN_SEMICOLON:
+            return "SEMICOLON";
         case TOKEN_NEWLINE:
             return "NEWLINE";
         case TOKEN_UNKNOWN:
@@ -369,8 +375,8 @@ static const char *token_type_name(TokenType type) {
             return "NUMBER";
         case TOKEN_STRING:
             return "STRING";
-        case TOKEN_VAL:
-            return "VAL";
+        case TOKEN_LET:
+            return "LET";
         case TOKEN_MUT:
             return "MUT";
         case TOKEN_FN:
@@ -510,3 +516,4 @@ int print_tokens(const char *path, const char *source) {
         }
     }
 }
+

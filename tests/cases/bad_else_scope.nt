@@ -1,7 +1,8 @@
 if false
-    print "unreachable"
+    print "unreachable";
 else
-    val hidden = 13
-    print hidden
-end
-print hidden
+    let hidden = 13;
+    print hidden;
+end;
+print hidden;
+

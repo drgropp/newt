@@ -1,17 +1,18 @@
-# Choose a branch by comparing numbers.
+;# Choose a branch by comparing numbers.
 
-val crop_value = 20
+let crop_value = 20;
 
 if crop_value > 10
-    print "good crop"
+    print "good crop";
 else
-    print "weak crop"
-end
+    print "weak crop";
+end;
 
-val mana = 3
+let mana = 3;
 
 if mana >= 5
-    print "cast spell"
+    print "cast spell";
 else
-    print "not enough mana"
-end
+    print "not enough mana";
+end;
+

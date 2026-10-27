@@ -21,7 +21,7 @@ typedef enum {
 } ExprKind;
 typedef struct Expr Expr;
 typedef enum {
-    STMT_VAL_DECL,
+    STMT_LET_DECL,
     STMT_MUT_DECL,
     STMT_FN_DECL,
     STMT_CALL,
@@ -119,3 +119,4 @@ void parser_free(Parser *parser);
 int print_parse_tree(const char *path, const char *source);
 
 #endif
+

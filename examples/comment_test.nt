@@ -1,3 +1,4 @@
-# Newt comment test
-print "hello"
-print "this # is inside a string" # trailing comment
+;# Newt comment test
+print "hello";
+print "this # is inside a string"; ;# trailing comment
+

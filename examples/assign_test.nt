@@ -1,3 +1,4 @@
-mut hp = 100
-hp = hp - 10
-print hp
+mut hp = 100;
+hp = hp - 10;
+print hp;
+

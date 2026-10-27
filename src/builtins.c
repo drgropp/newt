@@ -489,7 +489,7 @@ int call_append(Interpreter *interpreter, Expr *call, Value *value) {
         return 0;
     }
     if (!variable->is_mutable) {
-        runtime_name_error(interpreter, root->token, "cannot mutate immutable val");
+        runtime_name_error(interpreter, root->token, "cannot mutate immutable variable");
         return 0;
     }
     if (!eval_expression(interpreter, target, &list_value)) {
@@ -941,3 +941,4 @@ int call_pow(Interpreter *interpreter, Expr *call, Value *value) {
     }
     return 1;
 }
+

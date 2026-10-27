@@ -1,5 +1,6 @@
 for item in [1]
-    print item
-end
+    print item;
+end;
 
-print item
+print item;
+

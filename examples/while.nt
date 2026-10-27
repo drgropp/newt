@@ -1,12 +1,13 @@
-# Count from 1 through 5 and keep a running total.
+;# Count from 1 through 5 and keep a running total.
 
-mut count = 1
-mut total = 0
+mut count = 1;
+mut total = 0;
 
 while count <= 5
-    print count
-    total = total + count
-    count = count + 1
-end
+    print count;
+    total = total + count;
+    count = count + 1;
+end;
 
-print "total: " + text(total)
+print "total: " + text(total);
+

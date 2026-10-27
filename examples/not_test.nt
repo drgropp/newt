@@ -1,13 +1,14 @@
-val sleeping = false
+let sleeping = false;
 
-if not sleeping
-    print "awake"
-end
+if ! sleeping
+    print "awake";
+end;
 
-val ready = true
+let ready = true;
 
-if not ready
-    print "not ready"
+if ! ready
+    print "not ready";
 else
-    print "ready"
-end
+    print "ready";
+end;
+

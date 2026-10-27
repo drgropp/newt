@@ -1,0 +1,2 @@
+let fuel = 25
+print fuel;

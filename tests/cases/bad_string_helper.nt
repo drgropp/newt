@@ -1,1 +1,1 @@
-print len(42)
+print len(42);

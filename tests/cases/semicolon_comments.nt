@@ -1,0 +1,4 @@
+;# standalone
+let fuel = 25;# trailing
+print fuel; ;# separated
+;# comment at EOF

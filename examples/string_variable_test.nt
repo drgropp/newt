@@ -1,6 +1,7 @@
-# String variable test
-val crop = "carrot"
-val tool = "hoe"
+;# String variable test
+let crop = "carrot";
+let tool = "hoe";
 
-print crop
-print tool
+print crop;
+print tool;
+

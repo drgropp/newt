@@ -1,7 +1,8 @@
 fn skip()
-    continue
-end
+    continue;
+end;
 
 while true
-    skip()
-end
+    skip();
+end;
+

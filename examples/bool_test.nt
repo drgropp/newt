@@ -1,19 +1,20 @@
-# Boolean values and conditions
+;# Boolean values and conditions
 
-val awake = true
-val done = false
+let awake = true;
+let done = false;
 
-print awake
-print done
+print awake;
+print done;
 
 if awake
-    print "newt time"
+    print "newt time";
 else
-    print "sleep time"
-end
+    print "sleep time";
+end;
 
 if done
-    print "done"
+    print "done";
 else
-    print "not done"
-end
+    print "not done";
+end;
+

@@ -1,5 +1,6 @@
-val x = 2 + 3 * 4
-print x
-mut hp = 100
-hp = hp - 10
-print hp
+let x = 2 + 3 * 4;
+print x;
+mut hp = 100;
+hp = hp - 10;
+print hp;
+

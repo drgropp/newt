@@ -1,0 +1,4 @@
+let letter = 1;
+let letdown = 2;
+let val = 3;
+print letter + letdown + val;

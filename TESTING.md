@@ -79,6 +79,11 @@ git diff --check
 
 The focused suite currently checks:
 
+- required semicolons at newlines, end of file, and block closers;
+- multiple statements per line and inline blocks;
+- standalone and trailing `;#` comments, CRLF, and token columns;
+- comment markers inside strings and rejection of old `#` comments;
+
 - an existing positive example;
 - string concatenation;
 - each supported string escape: `\n`, `\t`, `\r`, `\\`, and `\"`;
@@ -99,7 +104,7 @@ The focused suite currently checks:
 - direct and nested indexed assignment;
 - `append` on an empty list and shared-list alias behavior;
 - indexing and `for` iteration after list mutation;
-- runtime errors for mutation through immutable `val` bindings;
+- runtime errors for mutation through immutable `let` bindings;
 - shared integer and range validation for indexed assignment;
 - runtime errors for out-of-range, fractional, and non-number indexes;
 - runtime errors for indexing a non-list or passing a non-list to `length`;
@@ -135,3 +140,4 @@ Add a small `.nt` file under `tests/cases`, then add one entry to `$Tests` in `t
 - exact `Stderr`.
 
 Keep cases deterministic and avoid depending on machine-specific absolute paths, locale-specific text, or existing user files.
+

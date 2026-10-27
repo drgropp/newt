@@ -1,10 +1,10 @@
-# Newt lexer test
+;# Newt lexer test
 
-val name = "newt"
-mut hp = 100
+let name = "newt";
+mut hp = 100;
 
 if hp >= 50
-    print name
+    print name;
 else
-    print "low hp"
-end
+    print "low hp";
+end;

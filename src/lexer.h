@@ -8,13 +8,14 @@
 typedef enum {
     TOKEN_EOF,
     TOKEN_NEWLINE,
+    TOKEN_SEMICOLON,
     TOKEN_UNKNOWN,
     TOKEN_ERROR,
     TOKEN_IDENT,
     TOKEN_NUMBER,
     TOKEN_STRING,
 
-    TOKEN_VAL,
+    TOKEN_LET,
     TOKEN_MUT,
     TOKEN_FN,
     TOKEN_RETURN,
@@ -84,3 +85,4 @@ void print_lexer_error(const char *path, Token token);
 int print_tokens(const char *path, const char *source);
 
 #endif
+

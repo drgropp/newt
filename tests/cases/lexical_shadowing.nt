@@ -1,14 +1,14 @@
-val name = "global"
+let name = "global";
 
 fn show(name)
-    print name
-end
+    print name;
+end;
 
 fn outer()
-    val name = "outer local"
-    show("parameter")
-    print name
-end
+    let name = "outer local";
+    show("parameter");
+    print name;
+end;
 
-outer()
-print name
+outer();
+print name;
