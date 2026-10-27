@@ -1,6 +1,6 @@
 CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -pedantic
-SOURCES := src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c
+SOURCES := src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c src/compiler.c
 HEADERS := $(wildcard src/*.h)
 
 ifeq ($(OS),Windows_NT)

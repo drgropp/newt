@@ -165,3 +165,13 @@ python3 tests/check_numeric_reference.py
 On Windows, `python tests/check_numeric_reference.py` also works. Use `--newt PATH` to select an interpreter executable or `--cc PATH` to select a C compiler. The deterministic check compares 129 results across signed integer arithmetic, integer division, float/double arithmetic, float rounding, and numeric conversions. Integer inputs avoid C overflow and division by zero; error behavior is covered by the regular regression suite. Temporary C/Newt sources and the reference executable are removed automatically.
 
 `src/numeric.c` owns typed arithmetic and conversions. The build rejects hosts that do not have 8-bit bytes, signed 32-bit `int`, binary32 `float`, and binary64 `double`. Both `build.bat` and `test_newt.bat` compile the complete interpreter, including this module.
+
+## Native compiler checks
+
+On x86-64 Linux with Python 3 and GCC:
+
+```sh
+python3 tests/test_native_compiler.py
+```
+
+The check emits assembly, links it, and executes each supported program, comparing stdout and exit status with the interpreter. Runtime failures compare diagnostic meaning, since native errors do not currently include source locations. Unsupported features must fail compilation before creating assembly output. All native subprocesses have a timeout.

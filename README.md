@@ -1,6 +1,6 @@
 # Newt
 
-Newt 0.001 is an experimental systems-language project implemented in C. The current implementation is a tree-walking interpreter for `.nt` programs, with C-style typed declarations and functions, lexical scope, and runtime type checks.
+Newt 0.001 is an experimental systems-language project implemented in C. Newt runs `.nt` programs through a tree-walking interpreter and can emit native assembly for a restricted integer subset. It supports C-style typed declarations and functions, lexical scope, and runtime type checks.
 
 Newt supports `let`, `mut`, `const`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. Programs with `start:` initialize top-level declarations and automatically call the marked `main`. Programs without `start:` execute top-level statements in order. Untyped `let`/`mut` declarations and `fn` functions are also supported.
 
@@ -66,12 +66,26 @@ See `examples/typed_systems.nt` for a runnable example. Use `--tokens` and `--pa
 
 Simple statements need `;`, including the final statement in a file. A closing `}` needs no semicolon. Opening braces may be on the header line or the following line. `;#` begins a line comment; braces and comment markers inside strings remain text.
 
+## Native integer compiler
+
+```sh
+./newt --emit-asm examples/native_integer.nt -o /tmp/native_integer.s --target x86_64-linux
+gcc -no-pie /tmp/native_integer.s -o /tmp/native_integer
+/tmp/native_integer
+```
+
+The compiler emits GNU assembly in Intel syntax for **x86-64 Linux / System V**. GCC's assembler and linker produce the executable; linking uses the host C library for printing and error reporting. Cross-architecture and bare-metal output are not supported. The compiler can emit this text on other hosts, but execution requires the selected target and toolchain.
+
+The supported subset includes `start:`, typed `int`/`bool`/`void` functions, up to six integer parameters, local bindings, assignment, checked integer arithmetic, comparisons, logical operators, `if`, `while`, `break`, `continue`, returns, and printing integers, booleans, or string literals. Globals must be moved into functions. Floats, doubles, lists, dynamic declarations, and other interpreter-only constructs produce compilation errors. Arithmetic needs an explicit integer context or typed operand: use `int half = 5 / 2;` rather than an untyped arithmetic expression. Native loops and calls use the host stack and do not impose the interpreter's iteration/call-depth limits.
+
+All compilation checks complete before an output file is opened. Runtime overflow, division by zero, and missing returns print native diagnostics and exit with status 1. `--emit-asm` never invokes the interpreter as a fallback.
+
 ## Build
 
 Newt currently builds with GCC:
 
 ```sh
-gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c -lm
+gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c src/compiler.c -lm
 ```
 
 Or use the small Makefile:
@@ -455,6 +469,7 @@ newt/
     interpreter.c/.h  runs the trees
     builtins.c/.h   built-in functions (files, text, lists, math)
     numeric.c/.h    typed numeric arithmetic and checked conversions
+    compiler.c/.h   native assembly generation
   README.md
   TESTING.md
   regression_tests.bat

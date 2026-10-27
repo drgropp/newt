@@ -1,7 +1,7 @@
 @echo off
 
 echo Building Newt...
-gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c -lm
+gcc -std=c11 -Wall -Wextra -pedantic -o newt.exe src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c src/compiler.c -lm
 if errorlevel 1 exit /b 1
 
 echo.

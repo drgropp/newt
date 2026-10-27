@@ -1,0 +1,15 @@
+int sum_to(int limit) {
+    int n = 0;
+    int total = 0;
+    while n < limit {
+        n = n + 1;
+        total = total + n;
+    }
+    return total;
+}
+
+start:
+int main(void) {
+    print sum_to(10);
+    return 0;
+}
