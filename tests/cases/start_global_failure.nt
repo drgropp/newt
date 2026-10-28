@@ -1,0 +1,1 @@
+int value = "bad"; start: void main(void) { print "must not execute"; }

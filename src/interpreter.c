@@ -1649,11 +1649,13 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
 int run_program(const char *path,
                        const char *source,
                        int script_argument_count,
-                       char **script_arguments) {
+                       char **script_arguments,
+                       int *program_exit_status) {
     Parser parser;
     Interpreter interpreter;
     int i;
 
+    if (program_exit_status != NULL) *program_exit_status = 0;
     parser_init(&parser, path, source);
     if (!parse_program(&parser)) {
         parser_free(&parser);
@@ -1710,6 +1712,19 @@ int run_program(const char *path,
     for (i = 0; i < parser.top_level_statement_count && !interpreter.had_error; i++) {
         int stmt_index = parser.top_level_statements[i];
         execute_statement(&interpreter, &parser.statements[stmt_index]);
+    }
+
+    if (!interpreter.had_error && parser.entry_statement >= 0) {
+        Stmt *entry = &parser.statements[parser.entry_statement];
+        Expr call = {0};
+        Value result;
+        call.kind = EXPR_CALL;
+        call.token = entry->name;
+        if (entry->declared_type == TYPE_VOID) {
+            call_function(&interpreter, &call, NULL);
+        } else if (call_function(&interpreter, &call, &result)) {
+            if (program_exit_status != NULL) *program_exit_status = result.integer;
+        }
     }
 
     {

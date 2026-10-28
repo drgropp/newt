@@ -1,0 +1,1 @@
+void other(void) { start: void main(void) {} }

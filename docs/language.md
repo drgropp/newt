@@ -2,6 +2,19 @@
 
 Newt is an experimental systems-language project currently implemented as an interpreter. Simple statements require `;`, even at the end of a file. Blocks use `{ }`; the opening brace may be on the header line or the following line. A closing `}` needs no semicolon.
 
+## Program entry
+
+```newt
+start:
+void main(void) {
+    print "hello world";
+}
+```
+
+`start:` tells Newt to call the following `main` automatically after initializing top-level declarations. The function must accept no parameters and return `void` or `int`. An integer return value becomes the process exit status; a void entry exits with zero. Use 0–255 for portable shell statuses. Get command-line arguments with `arg_count()` and `arg()`.
+
+Only declarations are allowed at top level in an entry program. Put executable statements inside functions and omit a top-level `main();` call. Files without `start:` still execute top-level statements as before. Token and parse-tree inspection does not run the program.
+
 ## C-style types
 
 ```newt
@@ -28,7 +41,7 @@ The type goes before the name. Plain declarations and `mut` are mutable. `let` a
 
 Numeric literals adopt the expected type; already-typed values need explicit conversions such as `double(fuel)` or `int(2.9)`. Integer conversion truncates toward zero and checks range. Integer arithmetic checks overflow and division by zero; `int half = 5 / 2;` yields 2. Typed parameters are mutable local copies unless marked `const` or `let`; lists still share their storage.
 
-Return types and argument types are enforced during execution. Void functions cannot produce values, and non-void typed functions cannot fall through. This is still an interpreter, not a whole-program static checker. `start:` is not available yet; call functions explicitly. Existing untyped declarations and `fn` functions below remain supported during migration.
+Return types and argument types are enforced during execution. Void functions cannot produce values, and non-void typed functions cannot fall through. This is still an interpreter, not a whole-program static checker. Use `start:` for automatic entry; files without it still require explicit calls. Existing untyped declarations and `fn` functions below remain supported during migration.
 
 ## Variables
 
@@ -189,7 +202,7 @@ fn add(a, b) {
 print add(2, 3);
 ```
 
-Functions may still have no parameters. Calls whose return values are not needed can remain standalone statements. A function currently supports up to 16 parameters. Newt does not have a `none` value yet, so a function without an explicit `return` produces the number `0` when its call is used as a value.
+Functions may still have no parameters. Calls whose return values are not needed can remain standalone statements. A function currently supports up to 16 parameters. Untyped `fn` functions without an explicit `return` produce the number `0`. Typed non-void functions must return a matching value; `void` functions cannot be used as values.
 
 ## Comments
 

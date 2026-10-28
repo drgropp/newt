@@ -68,6 +68,7 @@ typedef struct {
     int parameter_start;
     int parameter_count;
     DeclType declared_type;
+    int is_entry;
 } Stmt;
 struct Expr {
     ExprKind kind;
@@ -91,6 +92,8 @@ typedef struct {
     Token previous;
     const char *path;
     int had_error;
+    /* Index into statements; -1 means top-level compatibility execution. */
+    int entry_statement;
     ExprBlock *expr_blocks;
     int expr_block_used;
     int expression_count;

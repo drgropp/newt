@@ -23,6 +23,7 @@ typedef enum {
     TOKEN_STRING_TYPE,
     TOKEN_LIST_TYPE,
     TOKEN_CONST,
+    TOKEN_START,
     TOKEN_LET,
     TOKEN_MUT,
     TOKEN_FN,
@@ -59,6 +60,7 @@ typedef enum {
     TOKEN_LEFT_BRACKET,
     TOKEN_RIGHT_BRACKET,
     TOKEN_COMMA,
+    TOKEN_COLON,
     TOKEN_DOT
 } TokenType;
 typedef struct {

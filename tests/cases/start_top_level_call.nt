@@ -1,0 +1,2 @@
+start: void main(void) {}
+main();

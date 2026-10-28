@@ -1,0 +1,5 @@
+;# Newt calls this entry function automatically.
+start:
+void main(void) {
+    print "hello world";
+}

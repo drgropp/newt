@@ -2,7 +2,7 @@
 
 Newt 0.001 is an experimental systems-language project implemented in C. The current implementation is a tree-walking interpreter for `.nt` programs, with C-style typed declarations and functions, lexical scope, and runtime type checks.
 
-Newt supports `let`, `mut`, `const`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. Programs execute top-level statements in order; functions run when called explicitly. Untyped `let`/`mut` declarations and `fn` functions are also supported.
+Newt supports `let`, `mut`, `const`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. Programs with `start:` initialize top-level declarations and automatically call the marked `main`. Programs without `start:` execute top-level statements in order. Untyped `let`/`mut` declarations and `fn` functions are also supported.
 
 Strings and lists are reference counted. Typed numbers use distinct host C `int`, `float`, and `double` payloads; untyped numbers use double-based arithmetic. Runtime values are tagged interpreter objects.
 
@@ -14,6 +14,7 @@ int consume(int fuel, const int amount) {
     return fuel;
 }
 
+start:
 void main(void) {
     const int capacity = 25;
     mut int fuel = capacity;
@@ -26,9 +27,26 @@ void main(void) {
     print precision;
 }
 
-;# Call main explicitly.
-main();
 ```
+
+## Program entry and exit
+
+```newt
+start:
+void main(void) {
+    print "hello world";
+}
+```
+
+`start:` marks the following `void main(void)` or `int main(void)` as the entry function. Empty `()` also means no parameters. Only one entry marker is allowed, at top level. In a program with `start:`, top-level code consists of variable and function declarations; write executable statements inside functions. Do not add a top-level `main();` call.
+
+Newt registers functions and initializes globals in source order, then automatically calls `main`. `main` can use globals and functions declared later in the file because the automatic call happens after this initialization pass. Ordinary initializer expressions keep their existing declaration-order lookup rules. Command-line arguments are available through `arg_count()` and `arg()`.
+
+A `void main` exits with status zero after returning or reaching its closing brace. An `int main` must return an integer; Newt passes that integer to the host process as its exit status. Use 0 for success and a value from 1–255 for portable nonzero shell statuses. Values outside 0–255 follow the host's exit-status rules. Source loading, parsing, and runtime errors exit with status 1 and a diagnostic. `--tokens` and `--parse` never execute the entry function.
+
+Files without `start:` retain top-level execution. A function named `main` alone is an ordinary function in those files and must be called explicitly. `start` is a reserved keyword.
+
+See `examples/start.nt` for a hello-world program and `examples/start_exit.nt` for a program that exits with status 7.
 
 ## Typed declarations and functions
 
@@ -169,6 +187,7 @@ Newt currently supports:
 - mutable-list indexed assignment with `items[index] = value`
 - list growth with `append(list, value)`
 - list size with `length(list)`
+- `start:` with automatic entry into typed `main` and host exit-status propagation
 - C-style typed declarations and function signatures
 - distinct `int`, `float`, and `double` numeric behavior and explicit conversions
 - immutable `let` and `const` variables
@@ -383,6 +402,8 @@ file_append("examples/devlog.md", "Today I worked on Newt.\n");
 
 ## Main examples
 
+- `start.nt` demonstrates automatic program entry.
+- `start_exit.nt` demonstrates returning a process exit status.
 - `typed_systems.nt` demonstrates typed declarations, C-style functions, qualifiers, and explicit numeric conversion.
 - `args.nt` demonstrates direct command-line arguments.
 - `read_file.nt` demonstrates reading a complete text file.

@@ -16,6 +16,230 @@ function Normalize-Newlines([string]$Text) {
 
 $Tests = @(
     @{
+        Name = "entry index survives parser growth"
+        Arguments = "tests/cases/start_statement_growth.nt"
+        ExitCode = 0
+        Stdout = "42`n"
+        Stderr = ""
+    },
+    @{
+        Name = "explicit run preserves entry exit"
+        Arguments = "--run tests/cases/start_int_status.nt"
+        ExitCode = 7
+        Stdout = ""
+        Stderr = ""
+    },
+    @{
+        Name = "explicit run passes entry args"
+        Arguments = "--run tests/cases/start_args.nt hello"
+        ExitCode = 0
+        Stdout = "1`nhello`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_void"
+        Arguments = "tests/cases/start_void.nt"
+        ExitCode = 0
+        Stdout = "hello world`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_void_fallthrough"
+        Arguments = "tests/cases/start_void_fallthrough.nt"
+        ExitCode = 0
+        Stdout = "done`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_int_zero"
+        Arguments = "tests/cases/start_int_zero.nt"
+        ExitCode = 0
+        Stdout = "ok`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_int_status"
+        Arguments = "tests/cases/start_int_status.nt"
+        ExitCode = 7
+        Stdout = ""
+        Stderr = ""
+    },
+    @{
+        Name = "start_int_status_255"
+        Arguments = "tests/cases/start_int_status_255.nt"
+        ExitCode = 255
+        Stdout = ""
+        Stderr = ""
+    },
+    @{
+        Name = "start_global_order"
+        Arguments = "tests/cases/start_global_order.nt"
+        ExitCode = 0
+        Stdout = "5`n9`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_comments"
+        Arguments = "tests/cases/start_comments.nt"
+        ExitCode = 0
+        Stdout = "ready`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_args"
+        Arguments = "tests/cases/start_args.nt hello"
+        ExitCode = 0
+        Stdout = "1`nhello`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_legacy_no_auto"
+        Arguments = "tests/cases/start_legacy_no_auto.nt"
+        ExitCode = 0
+        Stdout = ""
+        Stderr = ""
+    },
+    @{
+        Name = "start_legacy_call_status"
+        Arguments = "tests/cases/start_legacy_call_status.nt"
+        ExitCode = 0
+        Stdout = "script`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start_missing_colon"
+        Arguments = "tests/cases/start_missing_colon.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_missing_colon.nt:1:7: parse error: expected ':' after start`n"
+    },
+    @{
+        Name = "start_missing_function"
+        Arguments = "tests/cases/start_missing_function.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_missing_function.nt:2:1: parse error: start: requires int main(void) or void main(void)`n"
+    },
+    @{
+        Name = "start_wrong_name"
+        Arguments = "tests/cases/start_wrong_name.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_wrong_name.nt:1:13: parse error: start: entry function must be named main`n"
+    },
+    @{
+        Name = "start_wrong_type"
+        Arguments = "tests/cases/start_wrong_type.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_wrong_type.nt:1:8: parse error: start: requires int main(void) or void main(void)`n"
+    },
+    @{
+        Name = "start_untyped"
+        Arguments = "tests/cases/start_untyped.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_untyped.nt:1:8: parse error: start: requires int main(void) or void main(void)`n"
+    },
+    @{
+        Name = "start_parameters"
+        Arguments = "tests/cases/start_parameters.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_parameters.nt:1:12: parse error: start: main must have no parameters; use arg_count() and arg()`n"
+    },
+    @{
+        Name = "start_duplicate"
+        Arguments = "tests/cases/start_duplicate.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_duplicate.nt:2:1: parse error: only one start: entry is allowed`n"
+    },
+    @{
+        Name = "start_nested"
+        Arguments = "tests/cases/start_nested.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_nested.nt:1:20: parse error: start: is only allowed at top level`n"
+    },
+    @{
+        Name = "start_top_level_call"
+        Arguments = "tests/cases/start_top_level_call.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_top_level_call.nt:2:1: parse error: programs with start: allow only declarations at top level; put executable statements inside main`n"
+    },
+    @{
+        Name = "start_top_level_print"
+        Arguments = "tests/cases/start_top_level_print.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_top_level_print.nt:1:26: parse error: programs with start: allow only declarations at top level; put executable statements inside main`n"
+    },
+    @{
+        Name = "start_top_level_loop"
+        Arguments = "tests/cases/start_top_level_loop.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_top_level_loop.nt:1:1: parse error: programs with start: allow only declarations at top level; put executable statements inside main`n"
+    },
+    @{
+        Name = "start_int_missing_return"
+        Arguments = "tests/cases/start_int_missing_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_int_missing_return.nt:1:12: runtime error: typed function completed without returning a value`n"
+    },
+    @{
+        Name = "start_int_wrong_return"
+        Arguments = "tests/cases/start_int_wrong_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_int_wrong_return.nt:1:32: runtime error: expected int, got string (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "start_void_wrong_return"
+        Arguments = "tests/cases/start_void_wrong_return.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_void_wrong_return.nt:1:26: runtime error: void function cannot return a value`n"
+    },
+    @{
+        Name = "start_global_failure"
+        Arguments = "tests/cases/start_global_failure.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_global_failure.nt:1:13: runtime error: expected int, got string (use an explicit numeric conversion when needed)`n"
+    },
+    @{
+        Name = "start_duplicate_main"
+        Arguments = "tests/cases/start_duplicate_main.nt"
+        ExitCode = 1
+        Stdout = ""
+        Stderr = "tests/cases/start_duplicate_main.nt:1:32: runtime error: function already defined 'main'`n"
+    },
+    @{
+        Name = "start_return_cleanup"
+        Arguments = "tests/cases/start_return_cleanup.nt"
+        ExitCode = 13
+        Stdout = "1`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start --tokens"
+        Arguments = "--tokens tests/cases/start_int_status.nt"
+        ExitCode = 0
+        Stdout = "1:1 START start`n1:6 COLON :`n1:8 INT int`n1:12 IDENT main`n1:16 LEFT_PAREN (`n1:17 VOID void`n1:21 RIGHT_PAREN )`n1:23 LEFT_BRACE {`n1:25 RETURN return`n1:32 NUMBER 7`n1:33 SEMICOLON ;`n1:35 RIGHT_BRACE }`n1:36 NEWLINE`n2:1 EOF`n"
+        Stderr = ""
+    },
+    @{
+        Name = "start --parse"
+        Arguments = "--parse tests/cases/start_int_status.nt"
+        ExitCode = 0
+        Stdout = "PROGRAM`n  ENTRY start:`n  FN_DECL name=main`n    RETURNS int`n    BODY`n      RETURN`n        NUMBER 7`nEOF`n"
+        Stderr = ""
+    },
+    @{
         Name = "bad_numeric_subtract"
         Arguments = "tests/cases/bad_numeric_subtract.nt"
         ExitCode = 1
