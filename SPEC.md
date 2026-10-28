@@ -44,7 +44,7 @@ Files without an entry marker retain top-level execution and status zero on succ
 
 ## C-style typed declarations and functions
 
-Supported forms include `int n = 25;`, `mut int n = 25;`, `let int n = 25;`, and `const int n = 25;`. Plain declarations and `mut` permit reassignment; `let` and `const` forbid it. Conflicting qualifier combinations are rejected. An initializer is required. The numeric types are `int`, `float`, and `double`; `bool`, `string`, and `list` also name existing value categories. No pointer-level const qualification or native layout is implemented.
+Supported forms include `int n = 25;`, `mut int n = 25;`, `let int n = 25;`, and `const int n = 25;`. Plain declarations and `mut` permit reassignment; `let` and `const` forbid it. Conflicting qualifier combinations are rejected. An initializer is required. The numeric types are `int`, `float`, and `double`; `bool`, `string`, and `list` also name existing value categories. Native-only pointer qualification and struct layout are described in the README.
 
 ```newt
 int add(int a, const int b) {
@@ -61,7 +61,7 @@ greet();
 print add(2, 3);
 ```
 
-C-style parameters require a type and a name. They are mutable local copies by default; `const` and `let` make a parameter binding read-only, while `mut` makes mutability explicit. Lists retain shared storage. Empty `()` and `(void)` both specify no parameters; `void` cannot appear alongside other parameters. Typed functions require bodies; prototypes are unsupported.
+C-style parameters require a type and a name. They are mutable local copies by default; `const` and `let` make a parameter binding read-only, while `mut` makes mutability explicit. Lists retain shared storage. Empty `()` and `(void)` both specify no parameters; `void` cannot appear alongside other parameters. Typed functions require bodies, except for explicit `extern` declarations used by the native compiler.
 
 Type compatibility is checked during interpretation at declarations, assignments, arguments, and returns. No whole-program static checker exists yet. A non-void typed function must return a matching value on its executed path; fallthrough is a runtime error. Void functions may use `return;` or fall through, but cannot return an expression or be used as a value. Existing `fn` functions retain immutable untyped parameters and their existing default numeric-zero return; a bare `return;` is invalid when such a function runs.
 
@@ -69,7 +69,7 @@ The interpreter requires signed 32-bit host C `int`, binary32 `float`, and binar
 
 An expected numeric type determines literal and literal-expression arithmetic. Literal-only operands alongside typed operands adopt the typed operand's type. Integer division truncates toward zero, checked integer arithmetic rejects overflow, and typed float arithmetic rounds to binary32. Typed floating arithmetic rejects non-finite results; finite underflow follows host rounding, potentially producing zero. Distinct numeric types require explicit conversion, including comparisons. Use `int(expr)`, `float(expr)`, and `double(expr)` with exactly one numeric argument. Explicit integer conversion truncates toward zero and checks range. Implicit contextual integer initialization rejects fractional literals. Float conversion checks range; double conversion preserves the numeric value. Numeric built-ins still return compatibility-mode double-based numbers and require explicit conversion when entering typed bindings.
 
-Existing untyped `let`, `mut`, and `fn` forms remain supported during migration. The new type names and `const` are reserved keywords; existing identifiers with those names must be renamed (the old `double` example helper is now `twice`). Whole-program static checking, pointers, and assembly are not implemented.
+Existing untyped `let`, `mut`, and `fn` forms remain supported during migration. The new type names and `const` are reserved keywords; existing identifiers with those names must be renamed (the old `double` example helper is now `twice`). Whole-program static checking is not implemented. Native-only pointer and assembly operations require `--emit-asm`.
 
 ## Values
 
@@ -295,13 +295,13 @@ Strings and lists created while a program runs are reference counted and freed a
 
 ## Known limitations and non-features
 
-Newt is an experimental systems-language project currently implemented as a tree-walk interpreter. The preview release does not include:
+Newt is an experimental systems-language project implemented with a tree-walk interpreter and a restricted x86-64 Linux native backend. The preview release does not include:
 
 - a `none` value;
 - list operations other than indexed assignment and `append`, and collection types other than lists;
 - modules, imports, packages, or namespaces;
 - classes, objects, or methods;
-- a bytecode engine, virtual machine, compiler backend, or native-code compiler;
+- a bytecode engine or virtual machine;
 - general OS or process APIs;
 - networking, HTTP, or JSON support;
 - automatic numeric/string conversion;
@@ -310,3 +310,9 @@ Newt is an experimental systems-language project currently implemented as a tree
 
 File I/O is intentionally basic and is not sandboxed. Source capacity limits are global to the parsed file, and diagnostics stop after the first lexer or parser error. Newt is experimental; this specification records the preview behavior so development can safely pause and resume later.
 
+
+## Native systems subset
+
+`--emit-asm` uses the same lexer and parser with an x86-64 Linux / System V backend. Its supported types and operations are documented in README.md. The interpreter rejects execution of native object types, pointer operations, struct declarations, sizeof, external calls, and assembly blocks with a native-compilation diagnostic; it does not simulate registers or arbitrary memory.
+
+The lexer captures double-braced assembly as an opaque token, preserving assembler punctuation, line comments, and quoted delimiters. The backend binds explicit input registers and an optional rax/eax output, preserves SysV callee-saved general registers, and treats caller-saved registers, flags, and memory as clobbered. Raw assembly must preserve rsp/rbp, stack alignment, and clear DF, and must fall through. Native object accesses are unchecked. Layouts and external calls use int size/alignment 4 and pointer size/alignment 8. Struct initialization evaluates fields in declaration order; pointer arithmetic and argument expressions preserve left-to-right evaluation.

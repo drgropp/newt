@@ -1,6 +1,7 @@
 CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -pedantic
 SOURCES := src/main.c src/lexer.c src/parser.c src/interpreter.c src/builtins.c src/numeric.c src/compiler.c
+PYTHON ?= python3
 HEADERS := $(wildcard src/*.h)
 
 ifeq ($(OS),Windows_NT)
@@ -9,7 +10,7 @@ else
 TARGET := newt
 endif
 
-.PHONY: all test
+.PHONY: all test test-all
 
 all: $(TARGET)
 
@@ -27,3 +28,11 @@ else
 	./$(TARGET) examples/ghostlog.nt
 endif
 
+
+# Full native execution tests require x86-64 Linux, Python 3, and GCC.
+test-all: $(TARGET)
+	$(PYTHON) tests/run_regressions.py --newt ./$(TARGET)
+	$(PYTHON) tests/check_numeric_reference.py --newt ./$(TARGET)
+	$(PYTHON) tests/test_native_compiler.py --newt ./$(TARGET)
+	$(PYTHON) tests/test_native_systems.py --newt ./$(TARGET)
+	$(PYTHON) tests/test_project_stress.py --newt ./$(TARGET)

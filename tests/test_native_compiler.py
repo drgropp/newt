@@ -14,7 +14,7 @@ CASES = [
     ('loops', 'start: void main(void) { int n = 0; while n < 8 { n = n + 1; if n == 2 { continue; } if n == 6 { break; } print n; } }'),
     ('shadow', 'start: void main(void) { int n = 4; if true { const int n = 8; print n; } else { print 0; } print n; }'),
     ('logic', 'start: void main(void) { bool a = false && bad(); bool b = true || bad(); print a; print b; } bool bad(void) { print "not reached"; return true; }'),
-    ('strings', 'start: void main(void) { print "line\\n"; print "a\\tb"; print "quote: \\""; }'.replace('\\""','\\""')),
+    ('strings', 'start: void main(void) { print "line\\n"; print "a\\tb"; print "quote: \\""; }'),
     ('negative_cast', 'start: void main(void) { print int(-5); }'),
     ('limits', 'start: void main(void) { int low = -2147483648; int high = 2147483647; print low; print high; }'),
     ('six_args', 'int sum(int a,int b,int c,int d,int e,int f) { return a+b+c+d+e+f; } start: void main(void) { print sum(1,2,3,4,5,6); }'),

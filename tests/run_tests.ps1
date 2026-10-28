@@ -692,7 +692,7 @@ $Tests = @(
         Arguments = "tests/cases/bad_brace_double.nt"
         ExitCode = 1
         Stdout = ""
-        Stderr = "tests/cases/bad_brace_double.nt:1:13: parse error: expected statement`n"
+        Stderr = "tests/cases/bad_brace_double.nt:1:12: parse error: expected '{' to open block`n"
     },
     @{
         Name = "bad_brace_extra"

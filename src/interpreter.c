@@ -750,6 +750,8 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
     }
 
     switch (expr->kind) {
+        case EXPR_MEMBER: case EXPR_AGGREGATE: case EXPR_SIZEOF:
+            runtime_error(interpreter, expr->token, "this systems feature requires --emit-asm"); return 0;
         case EXPR_NUMBER:
             if (!read_number_token(interpreter, expr->token, &number)) {
                 return 0;
@@ -804,6 +806,7 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
         case EXPR_LIST: {
             ListValue *list;
             int i;
+            const int count = expr->element_count;
 
             list = malloc(sizeof(ListValue));
             if (list == NULL) {
@@ -811,23 +814,23 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
                 return 0;
             }
             list->elements = NULL;
-            list->count = expr->element_count;
-            list->capacity = expr->element_count;
-            if (list->capacity > 0) {
-                list->elements = malloc((size_t)list->capacity * sizeof(Value));
+            list->count = count;
+            list->capacity = count;
+            if (count > 0) {
+                list->elements = malloc((size_t)count * sizeof(Value));
                 if (list->elements == NULL) {
                     free(list);
                     runtime_error(interpreter, expr->token, "not enough memory for list");
                     return 0;
                 }
-            }
-            for (i = 0; i < list->count; i++) {
-                Expr *element = interpreter->parser->list_elements[expr->element_start + i];
+                for (i = 0; i < count; i++) {
+                    Expr *element = interpreter->parser->list_elements[expr->element_start + i];
 
-                if (!eval_expression(interpreter, element, &list->elements[i])) {
-                    free(list->elements);
-                    free(list);
-                    return 0;
+                    if (!eval_expression(interpreter, element, &list->elements[i])) {
+                        free(list->elements);
+                        free(list);
+                        return 0;
+                    }
                 }
             }
             link_list(interpreter, list);
@@ -855,6 +858,9 @@ int eval_expression(Interpreter *interpreter, Expr *expr, Value *value) {
             return 1;
         }
         case EXPR_UNARY:
+            if (expr->token.type == TOKEN_AMP || expr->token.type == TOKEN_STAR) {
+                runtime_error(interpreter, expr->token, "pointer operations require --emit-asm"); return 0;
+            }
             if (expr->token.type == TOKEN_MINUS && interpreter->literal_type == TYPE_INT &&
                 expr->left->kind == EXPR_NUMBER) {
                 double magnitude;
@@ -1303,6 +1309,15 @@ static int call_function(Interpreter *interpreter,
         runtime_name_error(interpreter, call->token, "undefined function");
         return 0;
     }
+    if (function->declaration->is_extern || function->declaration->native_type.pointers || function->declaration->declared_type == TYPE_STRUCT) {
+        runtime_error(interpreter, call->token, "native function signature requires --emit-asm"); return 0;
+    }
+    for (i = 0; i < function->declaration->parameter_count; ++i) {
+        TypeSpec t = interpreter->parser->parameters[function->declaration->parameter_start + i].native_type;
+        if (t.pointers || t.base == TYPE_STRUCT) {
+            runtime_error(interpreter, call->token, "native parameter types require --emit-asm"); return 0;
+        }
+    }
     if (call->argument_count != function->declaration->parameter_count) {
         runtime_function_arity_error(interpreter,
                                      call->token,
@@ -1401,6 +1416,8 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
     }
 
     switch (stmt->kind) {
+        case STMT_STRUCT: case STMT_MEMORY_ASSIGN: case STMT_ASM:
+            runtime_error(interpreter, stmt->name, "this systems feature requires --emit-asm"); return 0;
         case STMT_FN_DECL:
             return define_function(interpreter, stmt);
         case STMT_CALL:
@@ -1449,6 +1466,9 @@ static int execute_statement(Interpreter *interpreter, Stmt *stmt) {
             return 1;
         case STMT_LET_DECL:
         case STMT_MUT_DECL:
+            if (stmt->native_type.pointers || stmt->declared_type == TYPE_STRUCT) {
+                runtime_error(interpreter, stmt->name, "native object types require --emit-asm"); return 0;
+            }
             if (!eval_decl_expression(interpreter, stmt->expression, stmt->declared_type, &value)) return 0;
             if (!define_variable(interpreter, stmt->name, value, stmt->kind == STMT_MUT_DECL)) {
                 value_release(interpreter, value);

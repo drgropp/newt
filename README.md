@@ -1,6 +1,6 @@
 # Newt
 
-Newt 0.001 is an experimental systems-language project implemented in C. Newt runs `.nt` programs through a tree-walking interpreter and can emit native assembly for a restricted integer subset. It supports C-style typed declarations and functions, lexical scope, and runtime type checks.
+Newt 0.001 is an experimental systems-language project implemented in C. Newt runs `.nt` programs through a tree-walking interpreter and can emit native assembly for a restricted systems subset. It supports C-style typed declarations and functions, lexical scope, and runtime type checks.
 
 Newt supports `let`, `mut`, `const`, semicolon-terminated simple statements, `{ }` blocks, and `;#` line comments. Programs with `start:` initialize top-level declarations and automatically call the marked `main`. Programs without `start:` execute top-level statements in order. Untyped `let`/`mut` declarations and `fn` functions are also supported.
 
@@ -66,7 +66,7 @@ See `examples/typed_systems.nt` for a runnable example. Use `--tokens` and `--pa
 
 Simple statements need `;`, including the final statement in a file. A closing `}` needs no semicolon. Opening braces may be on the header line or the following line. `;#` begins a line comment; braces and comment markers inside strings remain text.
 
-## Native integer compiler
+## Native compiler
 
 ```sh
 ./newt --emit-asm examples/native_integer.nt -o /tmp/native_integer.s --target x86_64-linux
@@ -76,9 +76,81 @@ gcc -no-pie /tmp/native_integer.s -o /tmp/native_integer
 
 The compiler emits GNU assembly in Intel syntax for **x86-64 Linux / System V**. GCC's assembler and linker produce the executable; linking uses the host C library for printing and error reporting. Cross-architecture and bare-metal output are not supported. The compiler can emit this text on other hosts, but execution requires the selected target and toolchain.
 
-The supported subset includes `start:`, typed `int`/`bool`/`void` functions, up to six integer parameters, local bindings, assignment, checked integer arithmetic, comparisons, logical operators, `if`, `while`, `break`, `continue`, returns, and printing integers, booleans, or string literals. Globals must be moved into functions. Floats, doubles, lists, dynamic declarations, and other interpreter-only constructs produce compilation errors. Arithmetic needs an explicit integer context or typed operand: use `int half = 5 / 2;` rather than an untyped arithmetic expression. Comparisons containing arithmetic also require typed operands; untyped comparisons such as `5 / 2 == 2` are rejected rather than changing double-based interpreter semantics. Native loops and calls use the host stack and do not impose the interpreter's iteration/call-depth limits.
+The supported subset includes `start:`, typed `int`/`bool`/`void` functions, up to six scalar/pointer parameters, local bindings, assignment, checked integer arithmetic, comparisons, logical operators, `if`, `while`, `break`, `continue`, returns, and printing integers, booleans, or string literals. Native-only systems features include pointers, structs, external calls, and assembly blocks, described below. Globals must be moved into functions. Floats, doubles, lists, dynamic declarations, and other interpreter-only constructs produce compilation errors. Arithmetic needs an explicit integer context or typed operand: use `int half = 5 / 2;` rather than an untyped arithmetic expression. Comparisons containing arithmetic also require typed operands; untyped comparisons such as `5 / 2 == 2` are rejected rather than changing double-based interpreter semantics. Native loops and calls use the host stack and do not impose the interpreter's iteration/call-depth limits.
 
 All compilation checks complete before an output file is opened. Runtime overflow, division by zero, and missing returns print native diagnostics and exit with status 1. `--emit-asm` never invokes the interpreter as a fallback.
+
+## Native pointers, structs, and C calls
+
+```newt
+struct Counter {
+    int value;
+};
+
+int bump(int* value) {
+    *value = *value + 1;
+    return *value;
+}
+
+start:
+int main(void) {
+    struct Counter counter = {40};
+    print bump(&counter.value);
+    print sizeof(struct Counter);
+    return 0;
+}
+```
+
+These operations require `--emit-asm`; they are not executed by the interpreter. Native pointers have one level and can point to `int`, `void`, or a struct. `&object` takes an address, `*pointer` dereferences it, and `pointer[index]` indexes memory. Pointer addition/subtraction by an integer scales by the pointed-to object size; pointer equality and null literal `0` are supported. `void*` can cross compatible pointer interfaces, but cannot be dereferenced or used for scaled arithmetic. Pointer accesses have no automatic bounds, lifetime, or null checks.
+
+`let int* p = &value;` locks the pointer binding while allowing writes through it. `const int* p = &value;` allows pointer reassignment but forbids writes through that pointer. Adding a const qualification is allowed; dropping it is rejected. `const` is a restriction on the access path, not a guarantee that another mutable alias cannot change the object.
+
+Structs are declared at top level. Their fields support `int`, pointers, and nested structs, with C-compatible layout for this target: int fields have size/alignment 4, pointers have size/alignment 8, and structs include alignment padding. Local aggregate initialization requires one value per field; padding is zeroed. Use `object.field`, `pointer->field`, and `sizeof(type)`. Passing or returning a struct by value, aggregate copying, multiple pointer levels, and global objects are outside the native subset.
+
+External functions use an explicit declaration:
+
+```newt
+extern int add_to(int* value, int amount);
+
+start:
+int main(void) {
+    int value = 40;
+    print add_to(&value, 2);
+    return 0;
+}
+```
+
+```sh
+./newt --emit-asm examples/native_interop.nt -o /tmp/native_interop.s
+gcc -no-pie /tmp/native_interop.s examples/native_bridge.c -o /tmp/native_interop
+/tmp/native_interop
+```
+
+External calls support up to six `int` or pointer arguments, with `int`, pointer, or `void` results. Declarations must match the separately linked C implementation and System V ABI. External booleans and structs by value are rejected. Interpreter built-ins are not automatically external native functions.
+
+## Native assembly blocks
+
+```newt
+start:
+int main(void) {
+    int value = 41;
+    int result = 0;
+    asm(edi = value) {{
+        mov eax, edi
+        add eax, 1
+    }} -> result;
+    print result;
+    return 0;
+}
+```
+
+`{{ ... }}` contains actual GNU assembler instructions in Intel syntax for the selected x86-64 Linux target. A bare block such as `{{ nop }}` is valid. The optional `asm(register = expression, ...)` prefix supplies up to six inputs, evaluated left to right; `-> variable;` stores the final `eax` (int/bool) or `rax` (pointer) into an existing mutable binding. Bool outputs are normalized to zero or one. A 32-bit input register cannot receive a pointer, and aliases such as `rax`/`eax` cannot both be bound. Supported input registers are `rax`, `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`, `rbx`, and `r12`–`r15`, including their 32-bit aliases.
+
+The backend preserves `rbx` and `r12`–`r15` around each assembly block and assumes caller-saved registers, flags, and memory may change. Raw code must preserve ABI state not managed by the wrapper: `rsp`/`rbp`, stack alignment, the direction flag's clear state, and floating-point control state. It must leave the assembler in its original text section and Intel/64-bit syntax and fall through to the closing delimiter. It must not return or jump out of its containing function. These are programmer obligations, not a sandbox. Integer overflow checks do not apply inside raw assembly.
+
+Inside the block, the assembler owns comment and punctuation rules: `#` comments and quoted text are preserved. This is target-specific assembly, not a translation layer for ARM or other CPUs; unsupported targets are rejected. The GNU assembler reports invalid instructions when assembling the emitted file.
+
+`examples/native_systems.nt` combines a struct, a pointer function, and an assembly output. Compile and link it with the same commands as the integer example.
 
 ## Build
 
@@ -189,6 +261,8 @@ Run the focused stdout, stderr, and exit-code regression suite on Windows with:
 ```bat
 regression_tests.bat
 ```
+
+On x86-64 Linux with Python 3 and GCC, run the complete interpreter/native/reference/stress suite with `make test-all`. Run `python3 tests/run_regressions.py` for the shared interpreter cases without PowerShell.
 
 See [TESTING.md](TESTING.md) for Windows and Unix-like testing instructions.
 

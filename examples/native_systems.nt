@@ -1,0 +1,23 @@
+struct Counter {
+    int value;
+};
+
+int bump(int* value) {
+    *value = *value + 1;
+    return *value;
+}
+
+start:
+int main(void) {
+    struct Counter counter = {40};
+    int result = bump(&counter.value);
+
+    ;# Assembly inputs are loaded into real registers.
+    asm(edi = result) {{
+        mov eax, edi
+        add eax, 1
+    }} -> result;
+
+    print result;
+    return 0;
+}

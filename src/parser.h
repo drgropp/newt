@@ -8,12 +8,21 @@
 /* TYPE_AUTO is the compatibility type for existing untyped code. */
 typedef enum {
     TYPE_AUTO, TYPE_INT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_VOID,
-    TYPE_BOOL, TYPE_STRING, TYPE_LIST
+    TYPE_BOOL, TYPE_STRING, TYPE_LIST, TYPE_STRUCT
 } DeclType;
+typedef struct {
+    DeclType base;
+    int pointers;
+    int is_const;
+    Token record;
+} TypeSpec;
+typedef struct { Token name; TypeSpec type; } Field;
+
 typedef struct {
     Token name;
     DeclType type;
     int is_mutable;
+    TypeSpec native_type;
 } Parameter;
 
 typedef enum {
@@ -28,7 +37,10 @@ typedef enum {
     EXPR_LIST,
     EXPR_INDEX,
     EXPR_INPUT_NUMBER,
-    EXPR_SQRT
+    EXPR_SQRT,
+    EXPR_MEMBER,
+    EXPR_AGGREGATE,
+    EXPR_SIZEOF
 } ExprKind;
 typedef struct Expr Expr;
 typedef enum {
@@ -44,7 +56,10 @@ typedef enum {
     STMT_IF,
     STMT_WHILE,
     STMT_FOR,
-    STMT_PRINT
+    STMT_PRINT,
+    STMT_STRUCT,
+    STMT_MEMORY_ASSIGN,
+    STMT_ASM
 } StmtKind;
 /* Block statement lists live in one shared pool (Parser.block_items). Each
    block records where its run starts; once parsing succeeds, the *_statements
@@ -69,6 +84,13 @@ typedef struct {
     int parameter_count;
     DeclType declared_type;
     int is_entry;
+    TypeSpec native_type;
+    int is_extern;
+    int field_start, field_count;
+    Token asm_text;
+    int asm_count, asm_has_output;
+    Token asm_regs[6];
+    Expr *asm_values[6];
 } Stmt;
 struct Expr {
     ExprKind kind;
@@ -79,6 +101,8 @@ struct Expr {
     int argument_count;
     int element_start;
     int element_count;
+    TypeSpec native_type;
+    int is_arrow;
 };
 /* Expressions point at each other by address, so they are allocated in
    fixed-size blocks that never move (a growable array could move them). */
@@ -100,6 +124,8 @@ typedef struct {
     Stmt *statements;
     int statement_count;
     int statement_capacity;
+    Field *fields;
+    int field_count, field_capacity;
     Parameter *parameters;
     int parameter_count;
     int parameter_capacity;

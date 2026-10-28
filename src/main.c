@@ -1,6 +1,6 @@
 /*
 Newt
-An experimental systems-language project, currently interpreted in C.
+An experimental systems-language project implemented in C.
 Created by drgropp.
 */
 
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "--about") == 0) {
-        printf("Newt is an experimental systems-language project, currently interpreted in C.\n");
+        printf("Newt is implemented in C, with an interpreter and a native subset compiler.\n");
         printf("Created by drgropp.\n");
         return 0;
     }

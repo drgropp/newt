@@ -9,6 +9,24 @@ The regression cases live in `tests/cases`, and the data-driven runner is `tests
 
 The regression harness treats standard output, standard error, and process status as separate parts of Newt's command-line contract. Successful program and development-mode output belongs on standard output. File-loading, lexer, parser, runtime, and command-line failures belong on standard error and must return a nonzero exit code.
 
+## Complete project check
+
+On x86-64 Linux with Python 3 and GCC:
+
+```sh
+make test-all
+```
+
+This runs the shared interpreter regressions, C numeric reference, native/interpreter comparisons, native systems checks, and deterministic project stress tests. The stress suite covers generated arithmetic/control-flow programs, AST/table growth, randomized C-compatible struct layouts, capacity limits, and malformed sources. Test subprocesses have timeouts.
+
+The literal regression cases can also run without PowerShell:
+
+```sh
+python3 tests/run_regressions.py
+```
+
+On Windows, use `python` if that is your Python 3 command. The runner reads the same literal table as `run_tests.ps1`, checks stdout/stderr/status separately, and preserves lone carriage returns while normalizing CRLF. It does not evaluate PowerShell expressions. `--newt PATH` selects another executable, including a sanitizer or optimized build. Native execution suites require x86-64 Linux; this command does not claim to test Windows or other native targets.
+
 ## Windows
 
 Requirements:
@@ -175,3 +193,13 @@ python3 tests/test_native_compiler.py
 ```
 
 The check emits assembly, links it, and executes each supported program, comparing stdout and exit status with the interpreter. Runtime failures compare diagnostic meaning, since native errors do not currently include source locations. Unsupported features must fail compilation before creating assembly output. All native subprocesses have a timeout.
+
+## Native systems checks
+
+On x86-64 Linux:
+
+```sh
+python3 tests/test_native_systems.py
+```
+
+This suite assembles, links, and runs pointer operations, const access paths, nested/C-compatible structs, external C calls, and raw assembly inputs/outputs. A machine-code caller checks preservation of all five non-frame SysV callee-saved registers. Rejection checks cover invalid memory types, layout cycles, const writes, register aliases/widths, and interpreter/native boundaries. It also checks raw-token source positions and that a compilation failure preserves existing output. The generated C bridge and executables live only in temporary directories.

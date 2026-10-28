@@ -1,0 +1,8 @@
+extern int add_to(int* value, int amount);
+
+start:
+int main(void) {
+    int value = 40;
+    print add_to(&value, 2);
+    return 0;
+}
