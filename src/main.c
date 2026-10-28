@@ -5,6 +5,7 @@ Created by drgropp.
 */
 
 #include "interpreter.h"
+#include "compiler.h"
 
 static void print_help(void) {
     printf("Newt %s\n", NEWT_VERSION);
@@ -14,6 +15,7 @@ static void print_help(void) {
     printf("  newt.exe --run <file.nt> [args...]  Run a Newt program\n");
     printf("  newt.exe --tokens <file.nt>  Print lexer tokens\n");
     printf("  newt.exe --parse <file.nt>   Print the parse tree\n");
+    printf("  newt.exe --emit-asm <file.nt> -o <file.s>  Emit x86-64 Linux assembly\n");
     printf("  newt.exe --version           Print the Newt version\n");
     printf("  newt.exe --help              Show this help\n");
     printf("\n");
@@ -95,6 +97,29 @@ int main(int argc, char **argv) {
         printf("Newt is an experimental systems-language project, currently interpreted in C.\n");
         printf("Created by drgropp.\n");
         return 0;
+    }
+
+    if (strcmp(argv[1], "--emit-asm") == 0) {
+        const char *target = "x86_64-linux";
+        const char *output = NULL;
+        char *compiler_source;
+        int i, ok;
+        if (argc < 5) {
+            fprintf(stderr, "usage: newt --emit-asm <file.nt> -o <file.s> [--target x86_64-linux]\n");
+            return 1;
+        }
+        for (i = 3; i < argc; i += 2) {
+            if (i + 1 >= argc) { fprintf(stderr, "compile error: missing option value\n"); return 1; }
+            if (strcmp(argv[i], "-o") == 0 && output == NULL) output = argv[i + 1];
+            else if (strcmp(argv[i], "--target") == 0) target = argv[i + 1];
+            else { fprintf(stderr, "compile error: unknown or repeated compiler option\n"); return 1; }
+        }
+        if (!output) { fprintf(stderr, "compile error: -o is required\n"); return 1; }
+        compiler_source = read_file(argv[2]);
+        if (!compiler_source) return 1;
+        ok = emit_native_assembly(argv[2], compiler_source, output, target);
+        free(compiler_source);
+        return ok ? 0 : 1;
     }
 
     if (strcmp(argv[1], "--tokens") == 0) {
